@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, Req, Res, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, Res, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
@@ -54,6 +54,17 @@ export class AuthController {
     const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME];
     if (refreshToken) await this.authService.logout(refreshToken);
     res.clearCookie(REFRESH_COOKIE_NAME, { path: '/api/v1/auth' });
+  }
+
+  /**
+   * The frontend's single source of truth for "who am I and what can I do" —
+   * returns the same computed profile/permission set JwtStrategy already built
+   * for this request, with no extra DB round-trip. Called once after login and
+   * again after every silent token refresh (see apps/web's auth store).
+   */
+  @Get('session')
+  getSession(@CurrentUser() user: AuthenticatedUser) {
+    return user;
   }
 
   @Post('change-password')

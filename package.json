@@ -35,7 +35,8 @@
     "@prisma/client@5.22.0": true,
     "@nestjs/core@10.4.22": true,
     "argon2@0.41.1": true,
-    "msgpackr-extract@3.0.4": true
+    "msgpackr-extract@3.0.4": true,
+    "unrs-resolver@1.12.2": true
   },
   "dependencies": {
     "@prisma/client": "^5.22.0"

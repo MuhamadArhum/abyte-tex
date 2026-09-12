@@ -57,8 +57,32 @@ Reverse-chronological. Each entry: what shipped, what changed, what's still open
 - **Runtime, against the live demo tenant**: created a product category, a product (with the category correctly joined on list/get), a material, a customer, and a supplier; duplicate SKU correctly rejected with 409 Conflict. Update endpoints, category parent/child nesting, and supplier purchase-order history join not yet independently exercised (no purchase orders exist yet to join against).
 
 ### Open / Next
-1. Frontend foundation (Next.js + Tailwind + shadcn/ui + TanStack Query + Zustand): auth pages, dashboard shell, role-aware navigation, and screens for everything built so far (tenant/factory/warehouse admin, master data CRUD).
-2. Rest of Phase 2 (§20.1): machines, employees — machines/employees have schema + nothing else yet.
-3. Phase 3: Sales, Procurement, Inventory, Production core workflows.
-4. Get Redis reachable and wire `apps/worker` (BullMQ) once there's a real background job to run (report generation, notification dispatch) — nothing needs it yet.
-5. Write automated tests (unit + e2e) covering what was so far only verified manually — the auth/RBAC/tenant-isolation flows above are exactly the kind of regression a future change could silently reintroduce.
+1. Rest of Phase 2 (§20.1): machines, employees — machines/employees have schema + nothing else yet.
+2. Phase 3: Sales, Procurement, Inventory, Production core workflows.
+3. Get Redis reachable and wire `apps/worker` (BullMQ) once there's a real background job to run (report generation, notification dispatch) — nothing needs it yet.
+4. Write automated tests (unit + e2e) covering what was so far only verified manually — the auth/RBAC/tenant-isolation flows above are exactly the kind of regression a future change could silently reintroduce.
+
+---
+
+## 2026-09-12 — Frontend foundation + full UI for every module built so far
+
+### What was implemented
+- **`apps/web` scaffolded**: Next.js 16 (App Router, Turbopack), React 19, TypeScript, Tailwind v4, shadcn/ui (built on Base UI, not Radix — this shadcn version's `DropdownMenuTrigger` etc. don't support `asChild`; see `buttonVariants`-based fix in `topbar.tsx`), TanStack Query, Zustand, react-hook-form. Read Next 16's bundled docs before writing any code — confirmed `middleware.ts` is renamed `proxy.ts` (same behavior) and checked the framework's authentication guide, which assumes Next.js itself owns sessions/cookies; that pattern doesn't apply here (see decision below).
+- **Auth architecture — entirely client-driven, deliberately not using Next's server-side session APIs**: the API and the frontend are different origins (`:4000` vs `:3000`), so Next's `cookies()`/`proxy.ts` on the frontend can never see the API's httpOnly refresh cookie — only the browser can, via a credentialed `fetch`. `useAuthBootstrap` (runs once on app load) calls `POST /auth/refresh` (`credentials: "include"`) then `GET /auth/session` to establish the session in a Zustand store; `apiFetch` attaches the in-memory access token, and on a 401 does exactly one silent refresh-and-retry before clearing the session. Verified for real: simulated the exact browser request (`Origin: http://localhost:3000`, credentialed) against the live API and confirmed `Access-Control-Allow-Origin` (the specific origin, not `*` — required for credentials to work at all), `Access-Control-Allow-Credentials: true`, and the `Set-Cookie` for the refresh token all come back correctly.
+- **`GET /auth/session` added to the API** (`apps/api/src/auth/auth.controller.ts`) — returns the same computed permission set (`allow`/`deny`/`roleCodes`/`factoryIds`) JwtStrategy already builds per-request, with no extra DB query. This is the frontend's single source of truth for "what can this user do."
+- **RBAC-aware UI**: `useAuthStore().can(resource, action)` mirrors the API's `PermissionsGuard` exactly, including giving platform admins **no** bypass on tenant-resource permissions (matching the bug fix from the previous phase) — a control the API would 403 on is not shown, rather than shown-then-fails.
+- **Shared primitives** (`components/shared/`): `DataTable` (loading/empty states built in), `PaginationBar`, `PageHeader`, `ConfirmDialog`, `StatusBadge`, `PermissionGate` (client-side convenience only — the API is still the real boundary).
+- **Full CRUD UI** for every backend module built so far: Products (+ categories), Materials, Customers, Suppliers, Factories (with tabbed Departments/Warehouses/Warehouse-Locations management on a detail page), Users (invite → role/factory checklists → edit), Roles (a full Resource×Action permission matrix, with Company Owner correctly locked read-only), Company Settings, and a separate Tenants console for platform admins (provision tenant → status changes).
+- **Auth pages**: login, forgot-password, reset-password (handles both "forgot my password" and "set my first password from an invite" — same backend endpoint, same page).
+
+### Verified
+- `tsc --noEmit`, `eslint`, and a full `next build` (production, all 14 routes: 13 static + 1 dynamic `/factories/[id]`) — all clean.
+- All 13 top-level routes return 200 from the running dev server with no server-side errors in the logs.
+- The exact cross-origin, credentialed request/response cycle the browser will perform (login → Set-Cookie → session fetch) was replayed with `curl -H "Origin: http://localhost:3000"` against the live API and confirmed correct.
+- **Not verified**: actual rendering and interaction in a real browser. No browser automation tool was available in this session (the Chrome extension prompt was declined). Static analysis, the build, and the server-side/API-contract checks above are strong signals but are not a substitute for actually clicking through the app — treat the UI as unverified for visual/interaction bugs (layout issues, a broken click handler, etc.) until someone opens it in a browser.
+
+### Open / Next
+1. **Manually click through the app in a browser** — this is the one verification step this session could not do. Priority: login → dashboard → invite a user → have them set a password and log in → try each CRUD screen.
+2. Automated tests (still none, frontend or backend).
+3. Phase 3 backend + UI: Sales, Procurement, Inventory, Production.
+4. Dashboards/reports (§12) — the current dashboard home is just quick-links, not the KPI dashboards the SRS describes; those need real aggregation endpoints first.

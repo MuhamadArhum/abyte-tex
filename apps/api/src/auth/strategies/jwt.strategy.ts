@@ -13,6 +13,8 @@ export interface JwtAccessPayload {
 export interface AuthenticatedUser {
   userId: string;
   email: string;
+  firstName: string;
+  lastName: string;
   tenantId: string | null;
   isPlatformAdmin: boolean;
   roleCodes: string[];
@@ -77,6 +79,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     return {
       userId: user.id,
       email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
       tenantId: user.tenantId,
       isPlatformAdmin: user.isPlatformAdmin,
       roleCodes,
