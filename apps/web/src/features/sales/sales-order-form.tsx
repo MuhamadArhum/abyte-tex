@@ -45,15 +45,15 @@ export function SalesOrderForm({ onSubmit, isSubmitting }: { onSubmit: (values: 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <Label>Factory *</Label>
-            <Select value={factoryId} onValueChange={(v) => setFactoryId(v ?? "")}>
-              <SelectTrigger className="w-full"><SelectValue placeholder="Select factory" /></SelectTrigger>
+            <Select value={factoryId || undefined} onValueChange={(v) => setFactoryId(v ?? "")}>
+              <SelectTrigger className="w-full"><SelectValue placeholder="Select factory">{factories?.data.find((f) => f.id === factoryId)?.name}</SelectValue></SelectTrigger>
               <SelectContent>{factories?.data.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5">
             <Label>Customer *</Label>
-            <Select value={customerId} onValueChange={(v) => setCustomerId(v ?? "")}>
-              <SelectTrigger className="w-full"><SelectValue placeholder="Select customer" /></SelectTrigger>
+            <Select value={customerId || undefined} onValueChange={(v) => setCustomerId(v ?? "")}>
+              <SelectTrigger className="w-full"><SelectValue placeholder="Select customer">{customers?.data.find((c) => c.id === customerId)?.name}</SelectValue></SelectTrigger>
               <SelectContent>{customers?.data.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
@@ -76,7 +76,7 @@ export function SalesOrderForm({ onSubmit, isSubmitting }: { onSubmit: (values: 
                       updateItem(index, { productId: v ?? "", unit: p?.unit ?? item.unit });
                     }}
                   >
-                    <SelectTrigger className="w-full"><SelectValue placeholder="Product" /></SelectTrigger>
+                    <SelectTrigger className="w-full"><SelectValue placeholder="Product">{products?.data.find((p) => p.id === item.productId)?.name}</SelectValue></SelectTrigger>
                     <SelectContent>{products?.data.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>

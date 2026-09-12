@@ -64,7 +64,7 @@ export function ProductForm({
             <Label>Category</Label>
             <Select value={categoryId ?? undefined} onValueChange={(v) => setValue("categoryId", v ?? undefined)}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select category" />
+                <SelectValue placeholder="Select category">{categories?.data.find((cat) => cat.id === categoryId)?.name}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {categories?.data.map((cat) => (

@@ -76,15 +76,15 @@ function InventoryPageContent() {
       <div className="mb-4 grid grid-cols-2 gap-3 sm:max-w-md">
         <div className="space-y-1.5">
           <Label>Factory</Label>
-          <Select value={factoryId} onValueChange={(v) => { setFactoryId(v ?? ""); setWarehouseId(""); }}>
-            <SelectTrigger className="w-full"><SelectValue placeholder="All factories" /></SelectTrigger>
+          <Select value={factoryId || undefined} onValueChange={(v) => { setFactoryId(v ?? ""); setWarehouseId(""); }}>
+            <SelectTrigger className="w-full"><SelectValue placeholder="All factories">{factories?.data.find((f) => f.id === factoryId)?.name}</SelectValue></SelectTrigger>
             <SelectContent>{factories?.data.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div className="space-y-1.5">
           <Label>Warehouse</Label>
-          <Select value={warehouseId} onValueChange={(v) => setWarehouseId(v ?? "")}>
-            <SelectTrigger className="w-full"><SelectValue placeholder="All warehouses" /></SelectTrigger>
+          <Select value={warehouseId || undefined} onValueChange={(v) => setWarehouseId(v ?? "")}>
+            <SelectTrigger className="w-full"><SelectValue placeholder="All warehouses">{warehouses?.data.find((w) => w.id === warehouseId)?.name}</SelectValue></SelectTrigger>
             <SelectContent>{warehouses?.data.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
@@ -172,22 +172,22 @@ function RecordMovementForm({ onDone }: { onDone: () => void }) {
         </div>
         <div className="space-y-1.5">
           <Label>Factory *</Label>
-          <Select value={factoryId} onValueChange={(v) => { setFactoryId(v ?? ""); setWarehouseId(""); }}>
-            <SelectTrigger className="w-full"><SelectValue placeholder="Select factory" /></SelectTrigger>
+          <Select value={factoryId || undefined} onValueChange={(v) => { setFactoryId(v ?? ""); setWarehouseId(""); }}>
+            <SelectTrigger className="w-full"><SelectValue placeholder="Select factory">{factories?.data.find((f) => f.id === factoryId)?.name}</SelectValue></SelectTrigger>
             <SelectContent>{factories?.data.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div className="space-y-1.5">
           <Label>Warehouse *</Label>
-          <Select value={warehouseId} onValueChange={(v) => setWarehouseId(v ?? "")}>
-            <SelectTrigger className="w-full"><SelectValue placeholder="Select warehouse" /></SelectTrigger>
+          <Select value={warehouseId || undefined} onValueChange={(v) => setWarehouseId(v ?? "")}>
+            <SelectTrigger className="w-full"><SelectValue placeholder="Select warehouse">{warehouses?.data.find((w) => w.id === warehouseId)?.name}</SelectValue></SelectTrigger>
             <SelectContent>{warehouses?.data.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div className="space-y-1.5">
           <Label>Item type *</Label>
           <Select value={itemKind} onValueChange={(v) => setItemKind((v as "product" | "material") ?? "material")}>
-            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-full"><SelectValue>{itemKind === "material" ? "Raw material" : "Finished product"}</SelectValue></SelectTrigger>
             <SelectContent>
               <SelectItem value="material">Raw material</SelectItem>
               <SelectItem value="product">Finished product</SelectItem>
@@ -197,16 +197,16 @@ function RecordMovementForm({ onDone }: { onDone: () => void }) {
         {itemKind === "material" ? (
           <div className="space-y-1.5">
             <Label>Material *</Label>
-            <Select value={materialId} onValueChange={(v) => { const m = materials?.data.find((mm) => mm.id === v); setMaterialId(v ?? ""); if (m) setUnit(m.unit); }}>
-              <SelectTrigger className="w-full"><SelectValue placeholder="Select material" /></SelectTrigger>
+            <Select value={materialId || undefined} onValueChange={(v) => { const m = materials?.data.find((mm) => mm.id === v); setMaterialId(v ?? ""); if (m) setUnit(m.unit); }}>
+              <SelectTrigger className="w-full"><SelectValue placeholder="Select material">{materials?.data.find((m) => m.id === materialId)?.name}</SelectValue></SelectTrigger>
               <SelectContent>{materials?.data.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
         ) : (
           <div className="space-y-1.5">
             <Label>Product *</Label>
-            <Select value={productId} onValueChange={(v) => { const p = products?.data.find((pp) => pp.id === v); setProductId(v ?? ""); if (p) setUnit(p.unit); }}>
-              <SelectTrigger className="w-full"><SelectValue placeholder="Select product" /></SelectTrigger>
+            <Select value={productId || undefined} onValueChange={(v) => { const p = products?.data.find((pp) => pp.id === v); setProductId(v ?? ""); if (p) setUnit(p.unit); }}>
+              <SelectTrigger className="w-full"><SelectValue placeholder="Select product">{products?.data.find((p) => p.id === productId)?.name}</SelectValue></SelectTrigger>
               <SelectContent>{products?.data.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
@@ -268,23 +268,23 @@ function TransferStockForm({ onDone }: { onDone: () => void }) {
       <div className="flex-1 space-y-4 overflow-y-auto px-1 pb-4">
         <div className="space-y-1.5">
           <Label>Factory *</Label>
-          <Select value={factoryId} onValueChange={(v) => { setFactoryId(v ?? ""); setFromWarehouseId(""); setToWarehouseId(""); }}>
-            <SelectTrigger className="w-full"><SelectValue placeholder="Select factory" /></SelectTrigger>
+          <Select value={factoryId || undefined} onValueChange={(v) => { setFactoryId(v ?? ""); setFromWarehouseId(""); setToWarehouseId(""); }}>
+            <SelectTrigger className="w-full"><SelectValue placeholder="Select factory">{factories?.data.find((f) => f.id === factoryId)?.name}</SelectValue></SelectTrigger>
             <SelectContent>{factories?.data.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <Label>From warehouse *</Label>
-            <Select value={fromWarehouseId} onValueChange={(v) => setFromWarehouseId(v ?? "")}>
-              <SelectTrigger className="w-full"><SelectValue placeholder="Select" /></SelectTrigger>
+            <Select value={fromWarehouseId || undefined} onValueChange={(v) => setFromWarehouseId(v ?? "")}>
+              <SelectTrigger className="w-full"><SelectValue placeholder="Select">{warehouses?.data.find((w) => w.id === fromWarehouseId)?.name}</SelectValue></SelectTrigger>
               <SelectContent>{warehouses?.data.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5">
             <Label>To warehouse *</Label>
-            <Select value={toWarehouseId} onValueChange={(v) => setToWarehouseId(v ?? "")}>
-              <SelectTrigger className="w-full"><SelectValue placeholder="Select" /></SelectTrigger>
+            <Select value={toWarehouseId || undefined} onValueChange={(v) => setToWarehouseId(v ?? "")}>
+              <SelectTrigger className="w-full"><SelectValue placeholder="Select">{warehouses?.data.find((w) => w.id === toWarehouseId)?.name}</SelectValue></SelectTrigger>
               <SelectContent>{warehouses?.data.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
@@ -292,7 +292,7 @@ function TransferStockForm({ onDone }: { onDone: () => void }) {
         <div className="space-y-1.5">
           <Label>Item type *</Label>
           <Select value={itemKind} onValueChange={(v) => setItemKind((v as "product" | "material") ?? "material")}>
-            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-full"><SelectValue>{itemKind === "material" ? "Raw material" : "Finished product"}</SelectValue></SelectTrigger>
             <SelectContent>
               <SelectItem value="material">Raw material</SelectItem>
               <SelectItem value="product">Finished product</SelectItem>
@@ -302,16 +302,16 @@ function TransferStockForm({ onDone }: { onDone: () => void }) {
         {itemKind === "material" ? (
           <div className="space-y-1.5">
             <Label>Material *</Label>
-            <Select value={materialId} onValueChange={(v) => { const m = materials?.data.find((mm) => mm.id === v); setMaterialId(v ?? ""); if (m) setUnit(m.unit); }}>
-              <SelectTrigger className="w-full"><SelectValue placeholder="Select material" /></SelectTrigger>
+            <Select value={materialId || undefined} onValueChange={(v) => { const m = materials?.data.find((mm) => mm.id === v); setMaterialId(v ?? ""); if (m) setUnit(m.unit); }}>
+              <SelectTrigger className="w-full"><SelectValue placeholder="Select material">{materials?.data.find((m) => m.id === materialId)?.name}</SelectValue></SelectTrigger>
               <SelectContent>{materials?.data.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
         ) : (
           <div className="space-y-1.5">
             <Label>Product *</Label>
-            <Select value={productId} onValueChange={(v) => { const p = products?.data.find((pp) => pp.id === v); setProductId(v ?? ""); if (p) setUnit(p.unit); }}>
-              <SelectTrigger className="w-full"><SelectValue placeholder="Select product" /></SelectTrigger>
+            <Select value={productId || undefined} onValueChange={(v) => { const p = products?.data.find((pp) => pp.id === v); setProductId(v ?? ""); if (p) setUnit(p.unit); }}>
+              <SelectTrigger className="w-full"><SelectValue placeholder="Select product">{products?.data.find((p) => p.id === productId)?.name}</SelectValue></SelectTrigger>
               <SelectContent>{products?.data.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>

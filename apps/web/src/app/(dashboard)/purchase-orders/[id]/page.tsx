@@ -146,8 +146,8 @@ function GoodsReceiptForm({
       <div className="flex-1 space-y-4 overflow-y-auto px-1 pb-4">
         <div className="space-y-1.5">
           <Label>Warehouse *</Label>
-          <Select value={warehouseId} onValueChange={(v) => setWarehouseId(v ?? "")}>
-            <SelectTrigger className="w-full"><SelectValue placeholder="Select warehouse" /></SelectTrigger>
+          <Select value={warehouseId || undefined} onValueChange={(v) => setWarehouseId(v ?? "")}>
+            <SelectTrigger className="w-full"><SelectValue placeholder="Select warehouse">{warehouses?.data.find((w) => w.id === warehouseId)?.name}</SelectValue></SelectTrigger>
             <SelectContent>{warehouses?.data.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>

@@ -97,8 +97,8 @@ function MarkAttendanceForm({ onDone }: { onDone: () => void }) {
       <div className="flex-1 space-y-4 px-1 pb-4">
         <div className="space-y-1.5">
           <Label>Employee *</Label>
-          <Select value={employeeId} onValueChange={(v) => setEmployeeId(v ?? "")}>
-            <SelectTrigger className="w-full"><SelectValue placeholder="Select employee" /></SelectTrigger>
+          <Select value={employeeId || undefined} onValueChange={(v) => setEmployeeId(v ?? "")}>
+            <SelectTrigger className="w-full"><SelectValue placeholder="Select employee">{(() => { const e = employees?.data.find((emp) => emp.id === employeeId); return e ? `${e.firstName} ${e.lastName} (${e.employeeCode})` : undefined; })()}</SelectValue></SelectTrigger>
             <SelectContent>{employees?.data.map((e) => <SelectItem key={e.id} value={e.id}>{e.firstName} {e.lastName} ({e.employeeCode})</SelectItem>)}</SelectContent>
           </Select>
         </div>
@@ -107,7 +107,7 @@ function MarkAttendanceForm({ onDone }: { onDone: () => void }) {
           <div className="space-y-1.5">
             <Label>Status *</Label>
             <Select value={status} onValueChange={(v) => setStatus((v as AttendanceStatus) ?? "PRESENT")}>
-              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-full"><SelectValue>{status.replaceAll("_", " ")}</SelectValue></SelectTrigger>
               <SelectContent>{ATTENDANCE_STATUSES.map((s) => <SelectItem key={s} value={s}>{s.replaceAll("_", " ")}</SelectItem>)}</SelectContent>
             </Select>
           </div>

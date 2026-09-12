@@ -102,6 +102,7 @@ function CreateJobForm({ onDone }: { onDone: () => void }) {
   const createMutation = useCreateMaintenanceJob();
 
   const canSubmit = factoryId && machineId;
+  const selectedMachine = machines?.data.find((m) => m.id === machineId);
 
   function handleSubmit() {
     if (!canSubmit) return;
@@ -116,15 +117,15 @@ function CreateJobForm({ onDone }: { onDone: () => void }) {
       <div className="flex-1 space-y-4 px-1 pb-4">
         <div className="space-y-1.5">
           <Label>Factory *</Label>
-          <Select value={factoryId} onValueChange={(v) => setFactoryId(v ?? "")}>
-            <SelectTrigger className="w-full"><SelectValue placeholder="Select factory" /></SelectTrigger>
+          <Select value={factoryId || undefined} onValueChange={(v) => setFactoryId(v ?? "")}>
+            <SelectTrigger className="w-full"><SelectValue placeholder="Select factory">{factories?.data.find((f) => f.id === factoryId)?.name}</SelectValue></SelectTrigger>
             <SelectContent>{factories?.data.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div className="space-y-1.5">
           <Label>Machine *</Label>
-          <Select value={machineId} onValueChange={(v) => setMachineId(v ?? "")}>
-            <SelectTrigger className="w-full"><SelectValue placeholder="Select machine" /></SelectTrigger>
+          <Select value={machineId || undefined} onValueChange={(v) => setMachineId(v ?? "")}>
+            <SelectTrigger className="w-full"><SelectValue placeholder="Select machine">{selectedMachine ? `${selectedMachine.name} (${selectedMachine.machineCode})` : undefined}</SelectValue></SelectTrigger>
             <SelectContent>{machines?.data.map((m) => <SelectItem key={m.id} value={m.id}>{m.name} ({m.machineCode})</SelectItem>)}</SelectContent>
           </Select>
         </div>

@@ -122,22 +122,22 @@ function CreateDispatchForm({ onDone }: { onDone: () => void }) {
       <div className="flex-1 space-y-4 overflow-y-auto px-1 pb-4">
         <div className="space-y-1.5">
           <Label>Factory *</Label>
-          <Select value={factoryId} onValueChange={(v) => { setFactoryId(v ?? ""); setWarehouseId(""); }}>
-            <SelectTrigger className="w-full"><SelectValue placeholder="Select factory" /></SelectTrigger>
+          <Select value={factoryId || undefined} onValueChange={(v) => { setFactoryId(v ?? ""); setWarehouseId(""); }}>
+            <SelectTrigger className="w-full"><SelectValue placeholder="Select factory">{factories?.data.find((f) => f.id === factoryId)?.name}</SelectValue></SelectTrigger>
             <SelectContent>{factories?.data.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div className="space-y-1.5">
           <Label>Warehouse *</Label>
-          <Select value={warehouseId} onValueChange={(v) => setWarehouseId(v ?? "")}>
-            <SelectTrigger className="w-full"><SelectValue placeholder="Select warehouse" /></SelectTrigger>
+          <Select value={warehouseId || undefined} onValueChange={(v) => setWarehouseId(v ?? "")}>
+            <SelectTrigger className="w-full"><SelectValue placeholder="Select warehouse">{warehouses?.data.find((w) => w.id === warehouseId)?.name}</SelectValue></SelectTrigger>
             <SelectContent>{warehouses?.data.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div className="space-y-1.5">
           <Label>Sales order *</Label>
-          <Select value={salesOrderId} onValueChange={(v) => { setSalesOrderId(v ?? ""); setRows({}); }}>
-            <SelectTrigger className="w-full"><SelectValue placeholder="Select sales order" /></SelectTrigger>
+          <Select value={salesOrderId || undefined} onValueChange={(v) => { setSalesOrderId(v ?? ""); setRows({}); }}>
+            <SelectTrigger className="w-full"><SelectValue placeholder="Select sales order">{selectedOrder ? `${selectedOrder.orderNumber} — ${selectedOrder.customer.name}` : undefined}</SelectValue></SelectTrigger>
             <SelectContent>{dispatchableOrders.map((o) => <SelectItem key={o.id} value={o.id}>{o.orderNumber} — {o.customer.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>

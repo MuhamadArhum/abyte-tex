@@ -182,8 +182,8 @@ function RecordOutputForm({ orderId, batch, factoryId, onDone }: { orderId: stri
         </div>
         <div className="space-y-1.5">
           <Label>Receive into warehouse (optional)</Label>
-          <Select value={warehouseId} onValueChange={(v) => setWarehouseId(v ?? "")}>
-            <SelectTrigger className="w-full"><SelectValue placeholder="Skip stock receipt" /></SelectTrigger>
+          <Select value={warehouseId || undefined} onValueChange={(v) => setWarehouseId(v ?? "")}>
+            <SelectTrigger className="w-full"><SelectValue placeholder="Skip stock receipt">{warehouses?.data.find((w) => w.id === warehouseId)?.name}</SelectValue></SelectTrigger>
             <SelectContent>{warehouses?.data.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
@@ -217,15 +217,15 @@ function ConsumeMaterialForm({ orderId, factoryId, onDone }: { orderId: string; 
       <div className="flex-1 space-y-4 px-1 pb-4">
         <div className="space-y-1.5">
           <Label>Material *</Label>
-          <Select value={materialId} onValueChange={(v) => { const m = materials?.data.find((mm) => mm.id === v); setMaterialId(v ?? ""); if (m) setUnit(m.unit); }}>
-            <SelectTrigger className="w-full"><SelectValue placeholder="Select material" /></SelectTrigger>
+          <Select value={materialId || undefined} onValueChange={(v) => { const m = materials?.data.find((mm) => mm.id === v); setMaterialId(v ?? ""); if (m) setUnit(m.unit); }}>
+            <SelectTrigger className="w-full"><SelectValue placeholder="Select material">{materials?.data.find((m) => m.id === materialId)?.name}</SelectValue></SelectTrigger>
             <SelectContent>{materials?.data.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div className="space-y-1.5">
           <Label>Warehouse *</Label>
-          <Select value={warehouseId} onValueChange={(v) => setWarehouseId(v ?? "")}>
-            <SelectTrigger className="w-full"><SelectValue placeholder="Select warehouse" /></SelectTrigger>
+          <Select value={warehouseId || undefined} onValueChange={(v) => setWarehouseId(v ?? "")}>
+            <SelectTrigger className="w-full"><SelectValue placeholder="Select warehouse">{warehouses?.data.find((w) => w.id === warehouseId)?.name}</SelectValue></SelectTrigger>
             <SelectContent>{warehouses?.data.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>

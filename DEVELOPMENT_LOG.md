@@ -172,3 +172,21 @@ The Phase 3–5 backend modules (Sales, Procurement, Production, Inventory, Disp
 1. Browser-test this batch with Playwright the same way Phase 1–2 was tested, watching specifically for the kind of bug that static analysis can't catch (D-021, D-023 were both this way).
 2. Frontend UI for Costing and Payroll (still API-only).
 3. Automated tests — still none.
+
+---
+
+## 2026-09-13 — Browser-tested the new UI batch; found and fixed a fourth real, static-analysis-invisible bug (D-024)
+
+Followed through on the open item above: started both dev servers against the live demo tenant and drove every new page (Sales, Procurement, Production Orders, Inventory, Dispatch, Quality, Maintenance, Machines, Employees, Attendance) with headless Playwright, logged in as the Company Owner.
+
+### What was verified
+- All 10 new/updated list pages render with no console errors, no failed/4xx-5xx requests, and correct empty states against the live DB.
+- Sheet/dialog forms open correctly (Record Movement, Transfer, Goods Receipt, dispatch item picker, defect rows, etc.).
+- Detail-page navigation for Sales Orders, Production Orders, and Purchase Orders (initially looked like a nav failure — turned out to be the same Turbopack first-compile timing artifact noted in the 2026-09-12 entry, resolved the same way: `page.waitForURL()` instead of a fixed timeout).
+
+### Bug found and fixed (D-024)
+**Every dynamic `<Select>` in the app displayed the raw foreign-key ID instead of its label once an item was actually picked** — e.g. choosing "Factory 01" left the trigger showing `cmtyfzein001rwakt5k1jqyrd`. Root cause: this project's Base UI-based `SelectValue` only auto-resolves a label from an `items` prop passed to `Select.Root`; nobody here passes that prop (every select is built the JSX-children way), so `SelectValue` silently fell back to stringifying the raw controlled value. Invisible to `tsc`/`eslint`/`next build` because the *submitted* value was always correct — this was a pure display bug — and invisible in every enum-valued select (status/type/outcome) because those enums' item children happen to equal their own value, masking the identical defect. Confirmed this predates this session too: `features/products/product-form.tsx`'s category select (built and "browser-tested" in the very first Phase 1–2 Playwright pass) had the exact same bug, just never noticed because that specific field's post-selection text wasn't checked.
+Fixed at every call site (~20 files) by passing the resolved label explicitly as `<SelectValue>`'s children — `<SelectValue placeholder="...">{list.find((x) => x.id === selectedId)?.name}</SelectValue>` — which `SelectValue` already prefers over its own (broken, for this codebase's usage pattern) auto-resolution. Verified with a scripted pass that opens every affected select on every affected page and asserts the trigger text is never a raw ID: 10/10 pages pass.
+
+### Takeaway
+This is the fourth real bug in this project (after D-015's tenant-isolation gap, D-021's blank-email validation, and D-023's phantom stock row) caught only by actually running the software — and the most widespread yet, since it silently affected essentially every foreign-key-referencing dropdown in the entire application, old and new. The pattern holds: "compiles, lints, and builds clean" keeps meaning "type-correct," not "correct." Reinforces the standing rule — a feature isn't `Done` until someone has actually looked at what it renders after a real interaction, not just that the request succeeded.

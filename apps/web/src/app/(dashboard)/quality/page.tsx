@@ -120,15 +120,15 @@ function CreateInspectionForm({ onDone }: { onDone: () => void }) {
       <div className="flex-1 space-y-4 overflow-y-auto px-1 pb-4">
         <div className="space-y-1.5">
           <Label>Factory *</Label>
-          <Select value={factoryId} onValueChange={(v) => setFactoryId(v ?? "")}>
-            <SelectTrigger className="w-full"><SelectValue placeholder="Select factory" /></SelectTrigger>
+          <Select value={factoryId || undefined} onValueChange={(v) => setFactoryId(v ?? "")}>
+            <SelectTrigger className="w-full"><SelectValue placeholder="Select factory">{factories?.data.find((f) => f.id === factoryId)?.name}</SelectValue></SelectTrigger>
             <SelectContent>{factories?.data.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div className="space-y-1.5">
           <Label>Related sales order (optional)</Label>
-          <Select value={salesOrderId} onValueChange={(v) => setSalesOrderId(v ?? "")}>
-            <SelectTrigger className="w-full"><SelectValue placeholder="None" /></SelectTrigger>
+          <Select value={salesOrderId || undefined} onValueChange={(v) => setSalesOrderId(v ?? "")}>
+            <SelectTrigger className="w-full"><SelectValue placeholder="None">{salesOrders?.data.find((o) => o.id === salesOrderId)?.orderNumber}</SelectValue></SelectTrigger>
             <SelectContent>{salesOrders?.data.map((o) => <SelectItem key={o.id} value={o.id}>{o.orderNumber}</SelectItem>)}</SelectContent>
           </Select>
         </div>

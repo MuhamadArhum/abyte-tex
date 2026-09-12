@@ -113,8 +113,8 @@ function MachinesPageContent() {
               {!editing && (
                 <div className="space-y-1.5">
                   <Label>Factory *</Label>
-                  <Select value={factoryId} onValueChange={(v) => setFactoryId(v ?? "")}>
-                    <SelectTrigger className="w-full"><SelectValue placeholder="Select factory" /></SelectTrigger>
+                  <Select value={factoryId || undefined} onValueChange={(v) => setFactoryId(v ?? "")}>
+                    <SelectTrigger className="w-full"><SelectValue placeholder="Select factory">{factories?.data.find((f) => f.id === factoryId)?.name}</SelectValue></SelectTrigger>
                     <SelectContent>
                       {factories?.data.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
                     </SelectContent>

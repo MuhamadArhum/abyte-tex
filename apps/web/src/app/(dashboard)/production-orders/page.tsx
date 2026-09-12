@@ -79,22 +79,22 @@ function ProductionOrdersPageContent() {
             <div className="flex-1 space-y-4 px-1 pb-4">
               <div className="space-y-1.5">
                 <Label>Factory *</Label>
-                <Select value={factoryId} onValueChange={(v) => setValue("factoryId", v ?? "")}>
-                  <SelectTrigger className="w-full"><SelectValue placeholder="Select factory" /></SelectTrigger>
+                <Select value={factoryId || undefined} onValueChange={(v) => setValue("factoryId", v ?? "")}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Select factory">{factories?.data.find((f) => f.id === factoryId)?.name}</SelectValue></SelectTrigger>
                   <SelectContent>{factories?.data.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
                 <Label>Product *</Label>
                 <Select
-                  value={productId}
+                  value={productId || undefined}
                   onValueChange={(v) => {
                     const p = products?.data.find((pp) => pp.id === v);
                     setValue("productId", v ?? "");
                     if (p) setValue("unit", p.unit);
                   }}
                 >
-                  <SelectTrigger className="w-full"><SelectValue placeholder="Select product" /></SelectTrigger>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Select product">{products?.data.find((p) => p.id === productId)?.name}</SelectValue></SelectTrigger>
                   <SelectContent>{products?.data.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>

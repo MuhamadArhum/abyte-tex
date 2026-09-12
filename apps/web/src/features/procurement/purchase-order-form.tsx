@@ -46,15 +46,15 @@ export function PurchaseOrderForm({ onSubmit, isSubmitting }: { onSubmit: (value
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <Label>Factory *</Label>
-            <Select value={factoryId} onValueChange={(v) => setFactoryId(v ?? "")}>
-              <SelectTrigger className="w-full"><SelectValue placeholder="Select factory" /></SelectTrigger>
+            <Select value={factoryId || undefined} onValueChange={(v) => setFactoryId(v ?? "")}>
+              <SelectTrigger className="w-full"><SelectValue placeholder="Select factory">{factories?.data.find((f) => f.id === factoryId)?.name}</SelectValue></SelectTrigger>
               <SelectContent>{factories?.data.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5">
             <Label>Supplier *</Label>
-            <Select value={supplierId} onValueChange={(v) => setSupplierId(v ?? "")}>
-              <SelectTrigger className="w-full"><SelectValue placeholder="Select supplier" /></SelectTrigger>
+            <Select value={supplierId || undefined} onValueChange={(v) => setSupplierId(v ?? "")}>
+              <SelectTrigger className="w-full"><SelectValue placeholder="Select supplier">{suppliers?.data.find((s) => s.id === supplierId)?.name}</SelectValue></SelectTrigger>
               <SelectContent>{suppliers?.data.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
@@ -77,7 +77,7 @@ export function PurchaseOrderForm({ onSubmit, isSubmitting }: { onSubmit: (value
                       updateItem(index, { materialId: v ?? "", unit: m?.unit ?? item.unit });
                     }}
                   >
-                    <SelectTrigger className="w-full"><SelectValue placeholder="Material" /></SelectTrigger>
+                    <SelectTrigger className="w-full"><SelectValue placeholder="Material">{materials?.data.find((m) => m.id === item.materialId)?.name}</SelectValue></SelectTrigger>
                     <SelectContent>{materials?.data.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>

@@ -106,8 +106,8 @@ function EmployeesPageContent() {
               {!editing && (
                 <div className="space-y-1.5">
                   <Label>Factory *</Label>
-                  <Select value={factoryId} onValueChange={(v) => setFactoryId(v ?? "")}>
-                    <SelectTrigger className="w-full"><SelectValue placeholder="Select factory" /></SelectTrigger>
+                  <Select value={factoryId || undefined} onValueChange={(v) => setFactoryId(v ?? "")}>
+                    <SelectTrigger className="w-full"><SelectValue placeholder="Select factory">{factories?.data.find((f) => f.id === factoryId)?.name}</SelectValue></SelectTrigger>
                     <SelectContent>{factories?.data.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
@@ -147,7 +147,7 @@ function EmployeesPageContent() {
                 <div className="space-y-1.5">
                   <Label>Status</Label>
                   <Select value={status} onValueChange={(v) => setValue("employmentStatus", v as EmploymentStatus)}>
-                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="w-full"><SelectValue>{status?.replaceAll("_", " ")}</SelectValue></SelectTrigger>
                     <SelectContent>{STATUSES.map((s) => <SelectItem key={s} value={s}>{s.replaceAll("_", " ")}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
