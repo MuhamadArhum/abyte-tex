@@ -1,0 +1,1788 @@
+// AbyteTex — Textile Manufacturing Management Platform
+// Prisma schema — single PostgreSQL database, multi-tenant (SRS §3, §17.1)
+//
+// Conventions (SRS §17.2):
+//  - Every tenant-scoped model carries tenantId + createdAt/updatedAt, and most carry
+//    createdBy/updatedBy (User id, no enforced FK to keep write-paths cheap — see
+//    IMPLEMENTATION_DECISIONS.md D-005).
+//  - Soft delete (`deletedAt`) is applied to records with downstream references or audit
+//    value (D-009); pure lookup/config tables hard-delete.
+//  - tenantId is NEVER trusted from client input — it is resolved server-side from the
+//    authenticated session (enforced in apps/api, not in the schema).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =====================================================================================
+// PLATFORM / TENANCY  (SRS §3, §4, §5.2, §5.3)
+// =====================================================================================
+
+enum TenantStatus {
+  TRIAL
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+}
+
+/// A Tenant IS the customer business ("Company" in SRS §5.2 terminology — see
+/// IMPLEMENTATION_DECISIONS.md D-002/D-004). Company-level settings live here.
+model Tenant {
+  id     String       @id @default(cuid())
+  name   String
+  slug   String       @unique
+  status TenantStatus @default(TRIAL)
+
+  logoUrl      String?
+  address      String?
+  contactEmail String?
+  contactPhone String?
+  taxNumber    String?
+  currency     String  @default("PKR")
+  timezone     String  @default("Asia/Karachi")
+
+  fiscalYearStartMonth Int    @default(7) // July, common PK fiscal year start
+  workingDays          Int[]  @default([1, 2, 3, 4, 5, 6]) // 0=Sun..6=Sat
+  workingHoursStart    String @default("09:00")
+  workingHoursEnd      String @default("18:00")
+
+  defaultFactoryId   String?
+  defaultFactory     Factory?   @relation("TenantDefaultFactory", fields: [defaultFactoryId], references: [id])
+  defaultWarehouseId String?
+  defaultWarehouse   Warehouse? @relation("TenantDefaultWarehouse", fields: [defaultWarehouseId], references: [id])
+
+  numberFormatSettings  Json?
+  invoiceFormatSettings Json?
+  productionSettings    Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users       User[]
+  roles       Role[]
+  factories   Factory[]    @relation("FactoryTenant")
+  warehouses  Warehouse[]  @relation("WarehouseTenant")
+  departments Department[]
+  shifts      Shift[]
+
+  customers  Customer[]
+  suppliers  Supplier[]
+  products   Product[]
+  categories ProductCategory[]
+  materials  Material[]
+
+  salesQuotations  SalesQuotation[]
+  salesOrders      SalesOrder[]
+  purchaseRequests PurchaseRequest[]
+  purchaseOrders   PurchaseOrder[]
+  goodsReceipts    GoodsReceipt[]
+
+  processRoutes     ProcessRoute[]
+  productionOrders  ProductionOrder[]
+  productionBatches ProductionBatch[]
+  machines          Machine[]
+  machineLogs       MachineLog[]
+  downtimes         Downtime[]
+
+  dispatches     Dispatch[]
+  stock          Stock[]
+  stockMovements StockMovement[]
+
+  inspectionTemplates  InspectionTemplate[]
+  qualityInspections   QualityInspection[]
+  maintenanceJobs      MaintenanceJob[]
+  maintenanceSchedules MaintenanceSchedule[]
+
+  employees      Employee[]
+  attendances    Attendance[]
+  incentives     Incentive[]
+  payrollPeriods PayrollPeriod[]
+
+  costSheets CostSheet[]
+
+  notifications Notification[]
+  files         FileAsset[]
+  auditLogs     AuditLog[]
+  syncEvents    SyncEvent[]
+
+  @@map("tenants")
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  INVITED
+  LOCKED
+}
+
+/// Users span both platform staff (tenantId null, isPlatformAdmin true) and tenant
+/// users. Email is globally unique to keep login a single lookup — see D-013.
+model User {
+  id       String  @id @default(cuid())
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+
+  email        String     @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  phone        String?
+  status       UserStatus @default(INVITED)
+
+  isPlatformAdmin Boolean @default(false)
+
+  lastLoginAt DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  roles               UserRole[]
+  permissionOverrides UserPermissionOverride[]
+  factoryAccess       UserFactoryAccess[]
+  loginHistory        LoginHistory[]
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+
+  supervisedProductionOrders ProductionOrder[] @relation("ProductionOrderSupervisor")
+  auditLogs                  AuditLog[]
+  notifications              Notification[]
+  uploadedFiles              FileAsset[]
+  employeeProfile            Employee?
+  syncEvents                 SyncEvent[]
+
+  @@index([tenantId])
+  @@map("users")
+}
+
+model LoginHistory {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  ipAddress String?
+  userAgent String?
+  success   Boolean
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("login_history")
+}
+
+/// Session management — SRS §5.1. Only a hash of the refresh token is stored so a
+/// leaked database backup can't be used to mint sessions; the token itself is a
+/// bearer credential held in an httpOnly cookie on the client.
+model RefreshToken {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tokenHash String    @unique
+  userAgent String?
+  ipAddress String?
+  expiresAt DateTime
+  revokedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+/// Seeded role catalog per SRS §4.1. tenantId is null for platform-level roles
+/// (SUPER_ADMIN, SUPPORT_ADMIN); every tenant gets its own copy of the tenant-level
+/// roles at creation time so permissions can be tuned per tenant (D-007).
+model Role {
+  id       String  @id @default(cuid())
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+
+  code        String // e.g. COMPANY_OWNER, PRODUCTION_MANAGER, MACHINE_OPERATOR
+  name        String
+  description String?
+  isSystem    Boolean @default(true) // seeded/standard vs. custom (Phase 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  permissions Permission[]
+  users       UserRole[]
+
+  @@unique([tenantId, code])
+  @@map("roles")
+}
+
+enum PermissionAction {
+  VIEW
+  CREATE
+  UPDATE
+  DELETE
+  APPROVE
+  REJECT
+  EXPORT
+  PRINT
+}
+
+/// (role, resource, action) tuples — SRS §4.2. `resource` is a module/entity key
+/// such as "sales_order", "production_batch", "machine" (see apps/api RBAC constants).
+model Permission {
+  id       String           @id @default(cuid())
+  roleId   String
+  role     Role             @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  resource String
+  action   PermissionAction
+
+  @@unique([roleId, resource, action])
+  @@map("permissions")
+}
+
+model UserRole {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleId String
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, roleId])
+  @@map("user_roles")
+}
+
+enum PermissionEffect {
+  ALLOW
+  DENY
+}
+
+/// Per-user permission exceptions on top of role permissions — SRS §4.2 ("...and,
+/// where required, per user"). DENY always wins over role-derived ALLOW.
+model UserPermissionOverride {
+  id       String           @id @default(cuid())
+  userId   String
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resource String
+  action   PermissionAction
+  effect   PermissionEffect
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, resource, action])
+  @@map("user_permission_overrides")
+}
+
+/// Scopes a user's access to specific factories within their tenant — D-008.
+model UserFactoryAccess {
+  id        String  @id @default(cuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  factoryId String
+  factory   Factory @relation(fields: [factoryId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, factoryId])
+  @@map("user_factory_access")
+}
+
+enum FactoryStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model Factory {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation("FactoryTenant", fields: [tenantId], references: [id])
+
+  code         String
+  name         String
+  address      String?
+  city         String?
+  contactPhone String?
+  contactEmail String?
+  status       FactoryStatus @default(ACTIVE)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  departments Department[]
+  warehouses  Warehouse[]         @relation("WarehouseFactory")
+  machines    Machine[]
+  employees   Employee[]
+  shifts      Shift[]
+  userAccess  UserFactoryAccess[]
+
+  salesOrders        SalesOrder[]
+  purchaseRequests   PurchaseRequest[]
+  purchaseOrders     PurchaseOrder[]
+  goodsReceipts      GoodsReceipt[]
+  productionOrders   ProductionOrder[]
+  productionBatches  ProductionBatch[]
+  dispatches         Dispatch[]
+  qualityInspections QualityInspection[]
+  maintenanceJobs    MaintenanceJob[]
+  attendances        Attendance[]
+  payrollPeriods     PayrollPeriod[]
+
+  defaultForTenants Tenant[] @relation("TenantDefaultFactory")
+
+  @@unique([tenantId, code])
+  @@map("factories")
+}
+
+model Department {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+  factoryId String
+  factory   Factory @relation(fields: [factoryId], references: [id])
+
+  code String
+  name String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employees          Employee[]
+  processRouteStages ProcessRouteStage[]
+  productionOrders   ProductionOrder[]
+  machines           Machine[]
+  downtimes          Downtime[]
+
+  @@unique([factoryId, code])
+  @@map("departments")
+}
+
+enum WarehouseType {
+  RAW_MATERIAL
+  WIP
+  FINISHED_GOODS
+  PACKING
+  GENERAL
+}
+
+model Warehouse {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation("WarehouseTenant", fields: [tenantId], references: [id])
+  factoryId String
+  factory   Factory @relation("WarehouseFactory", fields: [factoryId], references: [id])
+
+  code    String
+  name    String
+  type    WarehouseType @default(GENERAL)
+  address String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  locations            Location[]
+  stock                Stock[]
+  stockMovements       StockMovement[]
+  goodsReceipts        GoodsReceipt[]
+  dispatches           Dispatch[]
+  materialConsumptions MaterialConsumption[]
+
+  defaultForTenants Tenant[] @relation("TenantDefaultWarehouse")
+
+  @@unique([factoryId, code])
+  @@map("warehouses")
+}
+
+/// Warehouse → Location → Rack → Bin granularity — SRS §8.2.
+model Location {
+  id          String    @id @default(cuid())
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  code String
+  name String
+  rack String?
+  bin  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  stock          Stock[]
+  stockMovements StockMovement[]
+
+  @@unique([warehouseId, code])
+  @@map("locations")
+}
+
+model Shift {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+  factoryId String
+  factory   Factory @relation(fields: [factoryId], references: [id])
+
+  name      String
+  startTime String // "HH:mm"
+  endTime   String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employees         Employee[]
+  productionBatches ProductionBatch[]
+  machineLogs       MachineLog[]
+
+  @@unique([factoryId, name])
+  @@map("shifts")
+}
+
+// =====================================================================================
+// COMMERCIAL / MASTER DATA  (SRS §5.4, §6)
+// =====================================================================================
+
+enum PartyStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+model Customer {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  name          String
+  contactPerson String?
+  phone         String?
+  email         String?
+  address       String?
+  taxNumber     String?
+  paymentTerms  String?
+  creditLimit   Decimal?    @db.Decimal(14, 2)
+  status        PartyStatus @default(ACTIVE)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  salesQuotations SalesQuotation[]
+  salesOrders     SalesOrder[]
+
+  @@index([tenantId])
+  @@map("customers")
+}
+
+model Supplier {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  name          String
+  contactPerson String?
+  phone         String?
+  email         String?
+  address       String?
+  paymentTerms  String?
+  rating        Int?
+  status        PartyStatus @default(ACTIVE)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  purchaseOrders PurchaseOrder[]
+
+  @@index([tenantId])
+  @@map("suppliers")
+}
+
+model ProductCategory {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  name     String
+  parentId String?
+  parent   ProductCategory?  @relation("CategoryParent", fields: [parentId], references: [id])
+  children ProductCategory[] @relation("CategoryParent")
+
+  products Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, name, parentId])
+  @@map("product_categories")
+}
+
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+  DISCONTINUED
+}
+
+/// Finished/sellable goods — SRS §5.4.1.
+model Product {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  sku        String
+  code       String?
+  name       String
+  categoryId String?
+  category   ProductCategory? @relation(fields: [categoryId], references: [id])
+  unit       String // e.g. MTR, KG, PCS, ROLL
+
+  fabricType  String?
+  gsm         Float?
+  width       Float?
+  color       String?
+  shade       String?
+  composition String?
+  brand       String?
+  status      ProductStatus @default(ACTIVE)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  salesQuotationItems SalesQuotationItem[]
+  salesOrderItems     SalesOrderItem[]
+  productionOrders    ProductionOrder[]
+  productionBatches   ProductionBatch[]
+  dispatchItems       DispatchItem[]
+  stock               Stock[]
+  stockMovements      StockMovement[]
+
+  @@unique([tenantId, sku])
+  @@map("products")
+}
+
+enum MaterialType {
+  YARN
+  COTTON
+  CHEMICAL
+  DYE
+  PACKING
+  ACCESSORY
+  CONSUMABLE
+  OTHER
+}
+
+/// Raw materials — SRS §5.4.2.
+model Material {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  code         String
+  name         String
+  type         MaterialType
+  unit         String
+  reorderLevel Decimal?      @db.Decimal(14, 3)
+  status       ProductStatus @default(ACTIVE)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  purchaseRequestItems PurchaseRequestItem[]
+  purchaseOrderItems   PurchaseOrderItem[]
+  materialConsumptions MaterialConsumption[]
+  stock                Stock[]
+  stockMovements       StockMovement[]
+
+  @@unique([tenantId, code])
+  @@map("materials")
+}
+
+enum SalesQuotationStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+model SalesQuotation {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  quotationNumber String
+  customerId      String
+  customer        Customer             @relation(fields: [customerId], references: [id])
+  status          SalesQuotationStatus @default(DRAFT)
+
+  quotationDate DateTime  @default(now())
+  validUntil    DateTime?
+  subtotal      Decimal   @default(0) @db.Decimal(14, 2)
+  discount      Decimal   @default(0) @db.Decimal(14, 2)
+  tax           Decimal   @default(0) @db.Decimal(14, 2)
+  total         Decimal   @default(0) @db.Decimal(14, 2)
+  notes         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items SalesQuotationItem[]
+
+  @@unique([tenantId, quotationNumber])
+  @@map("sales_quotations")
+}
+
+model SalesQuotationItem {
+  id               String         @id @default(cuid())
+  salesQuotationId String
+  salesQuotation   SalesQuotation @relation(fields: [salesQuotationId], references: [id], onDelete: Cascade)
+  productId        String
+  product          Product        @relation(fields: [productId], references: [id])
+
+  quantity  Decimal @db.Decimal(14, 3)
+  unit      String
+  unitPrice Decimal @db.Decimal(14, 2)
+  discount  Decimal @default(0) @db.Decimal(14, 2)
+  lineTotal Decimal @db.Decimal(14, 2)
+
+  @@map("sales_quotation_items")
+}
+
+enum SalesOrderStatus {
+  DRAFT
+  CONFIRMED
+  PRODUCTION_PLANNED
+  IN_PRODUCTION
+  QUALITY
+  READY
+  DISPATCHED
+  COMPLETED
+  CANCELLED
+}
+
+/// Status flow per SRS §6.1: Draft → Confirmed → Production Planned → In Production
+/// → Quality → Ready → Dispatched → Completed.
+model SalesOrder {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+  factoryId String
+  factory   Factory @relation(fields: [factoryId], references: [id])
+
+  orderNumber String
+  customerId  String
+  customer    Customer         @relation(fields: [customerId], references: [id])
+  status      SalesOrderStatus @default(DRAFT)
+
+  orderDate    DateTime  @default(now())
+  deliveryDate DateTime?
+  currency     String    @default("PKR")
+  subtotal     Decimal   @default(0) @db.Decimal(14, 2)
+  discount     Decimal   @default(0) @db.Decimal(14, 2)
+  tax          Decimal   @default(0) @db.Decimal(14, 2)
+  total        Decimal   @default(0) @db.Decimal(14, 2)
+  notes        String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  items              SalesOrderItem[]
+  productionOrders   ProductionOrder[]
+  dispatches         Dispatch[]
+  qualityInspections QualityInspection[]
+
+  @@unique([tenantId, orderNumber])
+  @@map("sales_orders")
+}
+
+model SalesOrderItem {
+  id           String     @id @default(cuid())
+  salesOrderId String
+  salesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product    @relation(fields: [productId], references: [id])
+
+  quantity     Decimal @db.Decimal(14, 3)
+  unit         String
+  unitPrice    Decimal @db.Decimal(14, 2)
+  discount     Decimal @default(0) @db.Decimal(14, 2)
+  lineTotal    Decimal @db.Decimal(14, 2)
+  deliveredQty Decimal @default(0) @db.Decimal(14, 3)
+
+  dispatchItems DispatchItem[]
+
+  @@map("sales_order_items")
+}
+
+enum PurchaseRequestStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  CONVERTED
+}
+
+model PurchaseRequest {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+  factoryId String
+  factory   Factory @relation(fields: [factoryId], references: [id])
+
+  requestNumber String
+  requestedBy   String
+  status        PurchaseRequestStatus @default(DRAFT)
+  notes         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items          PurchaseRequestItem[]
+  purchaseOrders PurchaseOrder[]
+
+  @@unique([tenantId, requestNumber])
+  @@map("purchase_requests")
+}
+
+model PurchaseRequestItem {
+  id                String          @id @default(cuid())
+  purchaseRequestId String
+  purchaseRequest   PurchaseRequest @relation(fields: [purchaseRequestId], references: [id], onDelete: Cascade)
+  materialId        String?
+  material          Material?       @relation(fields: [materialId], references: [id])
+
+  quantity Decimal @db.Decimal(14, 3)
+  unit     String
+  notes    String?
+
+  @@map("purchase_request_items")
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  APPROVED
+  SENT
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+/// Procurement approval workflow — SRS §6.2: Purchase Request → Approval → Purchase
+/// Order → Goods Receipt → Quality Check → Inventory.
+model PurchaseOrder {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+  factoryId String
+  factory   Factory @relation(fields: [factoryId], references: [id])
+
+  poNumber          String
+  supplierId        String
+  supplier          Supplier            @relation(fields: [supplierId], references: [id])
+  purchaseRequestId String?
+  purchaseRequest   PurchaseRequest?    @relation(fields: [purchaseRequestId], references: [id])
+  status            PurchaseOrderStatus @default(DRAFT)
+
+  orderDate    DateTime  @default(now())
+  expectedDate DateTime?
+  currency     String    @default("PKR")
+  subtotal     Decimal   @default(0) @db.Decimal(14, 2)
+  tax          Decimal   @default(0) @db.Decimal(14, 2)
+  total        Decimal   @default(0) @db.Decimal(14, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items         PurchaseOrderItem[]
+  goodsReceipts GoodsReceipt[]
+
+  @@unique([tenantId, poNumber])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  materialId      String?
+  material        Material?     @relation(fields: [materialId], references: [id])
+
+  quantity    Decimal @db.Decimal(14, 3)
+  unit        String
+  unitPrice   Decimal @db.Decimal(14, 2)
+  lineTotal   Decimal @db.Decimal(14, 2)
+  receivedQty Decimal @default(0) @db.Decimal(14, 3)
+  rejectedQty Decimal @default(0) @db.Decimal(14, 3)
+
+  goodsReceiptItems GoodsReceiptItem[]
+
+  @@map("purchase_order_items")
+}
+
+enum GoodsReceiptStatus {
+  PENDING_QC
+  ACCEPTED
+  PARTIALLY_ACCEPTED
+  REJECTED
+}
+
+model GoodsReceipt {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+  factoryId String
+  factory   Factory @relation(fields: [factoryId], references: [id])
+
+  receiptNumber   String
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder      @relation(fields: [purchaseOrderId], references: [id])
+  warehouseId     String
+  warehouse       Warehouse          @relation(fields: [warehouseId], references: [id])
+  status          GoodsReceiptStatus @default(PENDING_QC)
+  receivedDate    DateTime           @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items GoodsReceiptItem[]
+
+  @@unique([tenantId, receiptNumber])
+  @@map("goods_receipts")
+}
+
+model GoodsReceiptItem {
+  id                  String            @id @default(cuid())
+  goodsReceiptId      String
+  goodsReceipt        GoodsReceipt      @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+  purchaseOrderItemId String
+  purchaseOrderItem   PurchaseOrderItem @relation(fields: [purchaseOrderItemId], references: [id])
+
+  receivedQty Decimal @db.Decimal(14, 3)
+  acceptedQty Decimal @db.Decimal(14, 3)
+  rejectedQty Decimal @default(0) @db.Decimal(14, 3)
+  notes       String?
+
+  @@map("goods_receipt_items")
+}
+
+// =====================================================================================
+// PRODUCTION OPERATIONS  (SRS §7)
+// =====================================================================================
+
+model ProcessRoute {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  code        String
+  name        String
+  description String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  stages           ProcessRouteStage[]
+  productionOrders ProductionOrder[]
+
+  @@unique([tenantId, code])
+  @@map("process_routes")
+}
+
+/// Configurable stage sequence per SRS §7.2 (Raw Material → Warping → Sizing →
+/// Weaving → Grey Fabric → Dyeing → Processing → Finishing → Quality → Packing →
+/// Dispatch is a representative route, not a fixed one).
+model ProcessRouteStage {
+  id             String       @id @default(cuid())
+  processRouteId String
+  processRoute   ProcessRoute @relation(fields: [processRouteId], references: [id], onDelete: Cascade)
+
+  sequence                Int
+  name                    String
+  departmentId            String?
+  department              Department? @relation(fields: [departmentId], references: [id])
+  expectedDurationMinutes Int?
+
+  productionBatches ProductionBatch[]
+
+  @@unique([processRouteId, sequence])
+  @@map("process_route_stages")
+}
+
+enum Priority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum ProductionOrderStatus {
+  PLANNED
+  RELEASED
+  IN_PROGRESS
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+/// Fields per SRS §7.3.
+model ProductionOrder {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+  factoryId String
+  factory   Factory @relation(fields: [factoryId], references: [id])
+
+  orderNumber    String
+  salesOrderId   String?
+  salesOrder     SalesOrder?   @relation(fields: [salesOrderId], references: [id])
+  productId      String
+  product        Product       @relation(fields: [productId], references: [id])
+  quantity       Decimal       @db.Decimal(14, 3)
+  unit           String
+  departmentId   String?
+  department     Department?   @relation(fields: [departmentId], references: [id])
+  processRouteId String?
+  processRoute   ProcessRoute? @relation(fields: [processRouteId], references: [id])
+  priority       Priority      @default(NORMAL)
+
+  plannedStartDate DateTime?
+  plannedEndDate   DateTime?
+  actualStartDate  DateTime?
+  actualEndDate    DateTime?
+
+  assignedMachineId    String?
+  assignedMachine      Machine? @relation("ProductionOrderAssignedMachine", fields: [assignedMachineId], references: [id])
+  assignedSupervisorId String?
+  assignedSupervisor   User?    @relation("ProductionOrderSupervisor", fields: [assignedSupervisorId], references: [id])
+
+  status ProductionOrderStatus @default(PLANNED)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  batches              ProductionBatch[]
+  materialConsumptions MaterialConsumption[]
+  costSheets           CostSheet[]
+
+  @@unique([tenantId, orderNumber])
+  @@map("production_orders")
+}
+
+enum BatchStatus {
+  IN_PROGRESS
+  COMPLETED
+  HOLD
+}
+
+/// Full production traceability per SRS §7.4.
+model ProductionBatch {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+  factoryId String
+  factory   Factory @relation(fields: [factoryId], references: [id])
+
+  batchNumber       String
+  productionOrderId String
+  productionOrder   ProductionOrder    @relation(fields: [productionOrderId], references: [id])
+  productId         String
+  product           Product            @relation(fields: [productId], references: [id])
+  processStageId    String?
+  processStage      ProcessRouteStage? @relation(fields: [processStageId], references: [id])
+  machineId         String?
+  machine           Machine?           @relation(fields: [machineId], references: [id])
+  operatorId        String?
+  operator          Employee?          @relation("ProductionBatchOperator", fields: [operatorId], references: [id])
+  shiftId           String?
+  shift             Shift?             @relation(fields: [shiftId], references: [id])
+
+  inputQuantity  Decimal @db.Decimal(14, 3)
+  outputQuantity Decimal @default(0) @db.Decimal(14, 3)
+  wastage        Decimal @default(0) @db.Decimal(14, 3)
+  rework         Decimal @default(0) @db.Decimal(14, 3)
+  rejection      Decimal @default(0) @db.Decimal(14, 3)
+
+  startTime DateTime?
+  endTime   DateTime?
+  status    BatchStatus @default(IN_PROGRESS)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  materialConsumptions MaterialConsumption[]
+  qualityInspections   QualityInspection[]
+  costSheets           CostSheet[]
+
+  @@unique([tenantId, batchNumber])
+  @@map("production_batches")
+}
+
+/// Material allocated/consumed against a production order or batch — SRS §7.1.
+model MaterialConsumption {
+  id String @id @default(cuid())
+
+  productionOrderId String
+  productionOrder   ProductionOrder  @relation(fields: [productionOrderId], references: [id])
+  productionBatchId String?
+  productionBatch   ProductionBatch? @relation(fields: [productionBatchId], references: [id])
+  materialId        String
+  material          Material         @relation(fields: [materialId], references: [id])
+  warehouseId       String
+  warehouse         Warehouse        @relation(fields: [warehouseId], references: [id])
+
+  quantity Decimal @db.Decimal(14, 3)
+  unit     String
+
+  createdAt DateTime @default(now())
+
+  @@map("material_consumptions")
+}
+
+enum MachineStatus {
+  RUNNING
+  IDLE
+  BREAKDOWN
+  MAINTENANCE
+  OFFLINE
+}
+
+/// Fields per SRS §7.5.
+model Machine {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+  factoryId String
+  factory   Factory @relation(fields: [factoryId], references: [id])
+
+  machineCode      String
+  name             String
+  type             String
+  manufacturer     String?
+  model            String?
+  serialNumber     String?
+  departmentId     String?
+  department       Department?   @relation(fields: [departmentId], references: [id])
+  location         String?
+  capacity         String?
+  installationDate DateTime?
+  status           MachineStatus @default(IDLE)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  productionBatches        ProductionBatch[]
+  assignedProductionOrders ProductionOrder[]     @relation("ProductionOrderAssignedMachine")
+  machineLogs              MachineLog[]
+  downtimes                Downtime[]
+  maintenanceJobs          MaintenanceJob[]
+  maintenanceSchedules     MaintenanceSchedule[]
+
+  @@unique([tenantId, machineCode])
+  @@map("machines")
+}
+
+/// Per-machine, shift-wise production tracking — SRS §7.6.
+model MachineLog {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  machineId  String
+  machine    Machine   @relation(fields: [machineId], references: [id])
+  shiftId    String?
+  shift      Shift?    @relation(fields: [shiftId], references: [id])
+  operatorId String?
+  operator   Employee? @relation("MachineLogOperator", fields: [operatorId], references: [id])
+
+  logDate        DateTime @default(now())
+  targetOutput   Decimal? @db.Decimal(14, 3)
+  actualOutput   Decimal? @db.Decimal(14, 3)
+  efficiencyPct  Decimal? @db.Decimal(5, 2)
+  utilizationPct Decimal? @db.Decimal(5, 2)
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, machineId, logDate])
+  @@map("machine_logs")
+}
+
+enum DowntimeCategory {
+  MECHANICAL
+  ELECTRICAL
+  MATERIAL_SHORTAGE
+  OPERATOR_ISSUE
+  MAINTENANCE
+  POWER_FAILURE
+  PRODUCTION_CHANGEOVER
+  OTHER
+}
+
+/// Categories per SRS §7.7.
+model Downtime {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  machineId    String
+  machine      Machine     @relation(fields: [machineId], references: [id])
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+  operatorId   String?
+  operator     Employee?   @relation("DowntimeOperator", fields: [operatorId], references: [id])
+
+  startTime       DateTime
+  endTime         DateTime?
+  durationMinutes Int?
+  category        DowntimeCategory
+  reason          String?
+  notes           String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  maintenanceJobs MaintenanceJob[]
+
+  @@index([tenantId, machineId])
+  @@map("downtimes")
+}
+
+// =====================================================================================
+// INVENTORY & LOGISTICS  (SRS §8)
+// =====================================================================================
+
+/// Current on-hand balance per warehouse/location/product-or-material/batch.
+model Stock {
+  id String @id @default(cuid())
+
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+  locationId  String?
+  location    Location? @relation(fields: [locationId], references: [id])
+  productId   String?
+  product     Product?  @relation(fields: [productId], references: [id])
+  materialId  String?
+  material    Material? @relation(fields: [materialId], references: [id])
+  batchNumber String?
+
+  quantity Decimal @default(0) @db.Decimal(14, 3)
+  unit     String
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([warehouseId, locationId, productId, materialId, batchNumber])
+  @@index([tenantId])
+  @@map("stock")
+}
+
+enum StockMovementType {
+  RECEIVE
+  ISSUE
+  TRANSFER
+  ADJUSTMENT
+  RETURN
+  CONSUMPTION
+  PRODUCTION_RECEIPT
+}
+
+/// Append-only ledger — the unbroken audit trail required by SRS §8.3. Stock balances
+/// (Stock model) are derived from this; never mutate history rows.
+model StockMovement {
+  id String @id @default(cuid())
+
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+  locationId  String?
+  location    Location? @relation(fields: [locationId], references: [id])
+  productId   String?
+  product     Product?  @relation(fields: [productId], references: [id])
+  materialId  String?
+  material    Material? @relation(fields: [materialId], references: [id])
+  batchNumber String?
+
+  type          StockMovementType
+  quantity      Decimal           @db.Decimal(14, 3)
+  unit          String
+  referenceType String? // e.g. "GoodsReceipt", "Dispatch", "ProductionBatch"
+  referenceId   String?
+  notes         String?
+  createdBy     String
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, productId])
+  @@index([tenantId, materialId])
+  @@index([tenantId, referenceType, referenceId])
+  @@map("stock_movements")
+}
+
+enum DispatchStatus {
+  PLANNED
+  PACKED
+  DISPATCHED
+  DELIVERED
+  CANCELLED
+}
+
+model Dispatch {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+  factoryId String
+  factory   Factory @relation(fields: [factoryId], references: [id])
+
+  dispatchNumber String
+  salesOrderId   String
+  salesOrder     SalesOrder     @relation(fields: [salesOrderId], references: [id])
+  warehouseId    String
+  warehouse      Warehouse      @relation(fields: [warehouseId], references: [id])
+  status         DispatchStatus @default(PLANNED)
+
+  vehicleNumber   String?
+  driverName      String?
+  driverPhone     String?
+  deliveryAddress String?
+  dispatchDate    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items DispatchItem[]
+
+  @@unique([tenantId, dispatchNumber])
+  @@map("dispatches")
+}
+
+model DispatchItem {
+  id               String          @id @default(cuid())
+  dispatchId       String
+  dispatch         Dispatch        @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
+  productId        String
+  product          Product         @relation(fields: [productId], references: [id])
+  salesOrderItemId String?
+  salesOrderItem   SalesOrderItem? @relation(fields: [salesOrderItemId], references: [id])
+
+  quantity             Decimal @db.Decimal(14, 3)
+  unit                 String
+  batchNumber          String?
+  rollOrPackageDetails Json?
+
+  @@map("dispatch_items")
+}
+
+// =====================================================================================
+// QUALITY & MAINTENANCE  (SRS §9)
+// =====================================================================================
+
+enum InspectionAppliesTo {
+  PRODUCTION_BATCH
+  GOODS_RECEIPT
+  DISPATCH
+}
+
+model InspectionTemplate {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  name           String
+  appliesTo      InspectionAppliesTo
+  checklistItems Json // [{ label, type, required }]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  inspections QualityInspection[]
+
+  @@map("inspection_templates")
+}
+
+enum QualityOutcome {
+  PASS
+  REWORK
+  HOLD
+  REJECT
+}
+
+/// Textile-specific inspection fields and traceability chain per SRS §9.1/§9.2:
+/// Customer Order → Production Order → Production Batch → Machine → Material Batch
+/// → Quality Inspection (reachable via productionBatch.productionOrder.salesOrder).
+model QualityInspection {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+  factoryId String
+  factory   Factory @relation(fields: [factoryId], references: [id])
+
+  inspectionNumber  String
+  templateId        String?
+  template          InspectionTemplate? @relation(fields: [templateId], references: [id])
+  productionBatchId String?
+  productionBatch   ProductionBatch?    @relation(fields: [productionBatchId], references: [id])
+  goodsReceiptId    String?
+  salesOrderId      String?
+  salesOrder        SalesOrder?         @relation(fields: [salesOrderId], references: [id])
+  inspectedBy       String
+  inspectionDate    DateTime            @default(now())
+  outcome           QualityOutcome
+
+  gsm              Float?
+  width            Float?
+  shade            String?
+  rollLength       Float?
+  weight           Float?
+  colorVariation   String?
+  stitchingDefects String?
+  notes            String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  defects Defect[]
+
+  @@unique([tenantId, inspectionNumber])
+  @@map("quality_inspections")
+}
+
+enum DefectSeverity {
+  MINOR
+  MAJOR
+  CRITICAL
+}
+
+model Defect {
+  id                  String            @id @default(cuid())
+  qualityInspectionId String
+  qualityInspection   QualityInspection @relation(fields: [qualityInspectionId], references: [id], onDelete: Cascade)
+
+  defectType String
+  severity   DefectSeverity
+  quantity   Decimal?       @db.Decimal(14, 3)
+  notes      String?
+
+  @@map("defects")
+}
+
+enum MaintenanceType {
+  CORRECTIVE
+  PREVENTIVE
+}
+
+enum MaintenanceStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+/// Corrective (auto-created on breakdown) and preventive (scheduled) maintenance —
+/// SRS §9.3.
+model MaintenanceJob {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+  factoryId String
+  factory   Factory @relation(fields: [factoryId], references: [id])
+
+  jobNumber  String
+  machineId  String
+  machine    Machine           @relation(fields: [machineId], references: [id])
+  type       MaintenanceType
+  downtimeId String?
+  downtime   Downtime?         @relation(fields: [downtimeId], references: [id])
+  status     MaintenanceStatus @default(OPEN)
+
+  scheduledDate  DateTime?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  technicianId   String?
+  technician     Employee? @relation("MaintenanceTechnician", fields: [technicianId], references: [id])
+  sparePartsUsed Json?
+  cost           Decimal?  @db.Decimal(14, 2)
+  notes          String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, jobNumber])
+  @@map("maintenance_jobs")
+}
+
+model MaintenanceSchedule {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  machineId       String
+  machine         Machine   @relation(fields: [machineId], references: [id])
+  frequencyDays   Int
+  lastPerformedAt DateTime?
+  nextDueAt       DateTime?
+  notes           String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("maintenance_schedules")
+}
+
+// =====================================================================================
+// WORKFORCE / HR  (SRS §10)
+// =====================================================================================
+
+enum EmploymentStatus {
+  ACTIVE
+  INACTIVE
+  TERMINATED
+  ON_LEAVE
+}
+
+model Employee {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+  factoryId String
+  factory   Factory @relation(fields: [factoryId], references: [id])
+
+  employeeCode     String
+  firstName        String
+  lastName         String
+  departmentId     String?
+  department       Department?      @relation(fields: [departmentId], references: [id])
+  designation      String?
+  joiningDate      DateTime?
+  shiftId          String?
+  shift            Shift?           @relation(fields: [shiftId], references: [id])
+  employmentStatus EmploymentStatus @default(ACTIVE)
+  phone            String?
+  email            String?
+
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  attendances           Attendance[]
+  incentives            Incentive[]
+  payrollEntries        PayrollEntry[]
+  operatedBatches       ProductionBatch[] @relation("ProductionBatchOperator")
+  machineLogsAsOperator MachineLog[]      @relation("MachineLogOperator")
+  downtimesAsOperator   Downtime[]        @relation("DowntimeOperator")
+  maintenanceJobsAsTech MaintenanceJob[]  @relation("MaintenanceTechnician")
+
+  @@unique([tenantId, employeeCode])
+  @@map("employees")
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  HALF_DAY
+  LEAVE
+}
+
+model Attendance {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+  factoryId String
+  factory   Factory @relation(fields: [factoryId], references: [id])
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  date       DateTime @db.Date
+
+  checkIn         DateTime?
+  checkOut        DateTime?
+  status          AttendanceStatus @default(PRESENT)
+  overtimeMinutes Int              @default(0)
+  notes           String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, employeeId, date])
+  @@map("attendances")
+}
+
+enum IncentiveType {
+  PRODUCTION_BONUS
+  ATTENDANCE_BONUS
+  OTHER
+}
+
+model Incentive {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  employeeId String
+  employee   Employee      @relation(fields: [employeeId], references: [id])
+  type       IncentiveType
+  amount     Decimal       @db.Decimal(14, 2)
+  period     String // e.g. "2026-09"
+  notes      String?
+
+  createdAt DateTime @default(now())
+
+  @@map("incentives")
+}
+
+enum PayrollStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  PAID
+}
+
+/// Payroll inputs, not a full payroll engine — SRS §10.3.
+model PayrollPeriod {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+  factoryId String
+  factory   Factory @relation(fields: [factoryId], references: [id])
+
+  periodStart DateTime      @db.Date
+  periodEnd   DateTime      @db.Date
+  status      PayrollStatus @default(DRAFT)
+  approvedBy  String?
+  approvedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entries PayrollEntry[]
+
+  @@unique([tenantId, factoryId, periodStart, periodEnd])
+  @@map("payroll_periods")
+}
+
+model PayrollEntry {
+  id              String        @id @default(cuid())
+  payrollPeriodId String
+  payrollPeriod   PayrollPeriod @relation(fields: [payrollPeriodId], references: [id], onDelete: Cascade)
+  employeeId      String
+  employee        Employee      @relation(fields: [employeeId], references: [id])
+
+  baseSalary      Decimal @db.Decimal(14, 2)
+  overtimeAmount  Decimal @default(0) @db.Decimal(14, 2)
+  incentiveAmount Decimal @default(0) @db.Decimal(14, 2)
+  deductions      Decimal @default(0) @db.Decimal(14, 2)
+  netAmount       Decimal @db.Decimal(14, 2)
+  notes           String?
+
+  @@unique([payrollPeriodId, employeeId])
+  @@map("payroll_entries")
+}
+
+// =====================================================================================
+// COSTING  (SRS §11)
+// =====================================================================================
+
+/// Total Production Cost = Material + Labor + Machine + Energy/Process + Packing +
+/// Overhead — SRS §11.
+model CostSheet {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  productionOrderId String?
+  productionOrder   ProductionOrder? @relation(fields: [productionOrderId], references: [id])
+  productionBatchId String?
+  productionBatch   ProductionBatch? @relation(fields: [productionBatchId], references: [id])
+
+  materialCost Decimal @default(0) @db.Decimal(14, 2)
+  laborCost    Decimal @default(0) @db.Decimal(14, 2)
+  machineCost  Decimal @default(0) @db.Decimal(14, 2)
+  energyCost   Decimal @default(0) @db.Decimal(14, 2)
+  packingCost  Decimal @default(0) @db.Decimal(14, 2)
+  overheadCost Decimal @default(0) @db.Decimal(14, 2)
+  totalCost    Decimal @default(0) @db.Decimal(14, 2)
+
+  estimatedCost Decimal? @db.Decimal(14, 2)
+  actualCost    Decimal? @db.Decimal(14, 2)
+  variance      Decimal? @db.Decimal(14, 2)
+  costPerUnit   Decimal? @db.Decimal(14, 4)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("cost_sheets")
+}
+
+// =====================================================================================
+// PLATFORM SERVICES  (SRS §12.7, §15, §13)
+// =====================================================================================
+
+enum NotificationType {
+  LOW_STOCK
+  PRODUCTION_DELAY
+  MACHINE_BREAKDOWN
+  MAINTENANCE_DUE
+  QUALITY_REJECTION
+  PENDING_APPROVAL
+  ORDER_DEADLINE
+  ATTENDANCE_ALERT
+  GENERAL
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+}
+
+model Notification {
+  id       String  @id @default(cuid())
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+
+  userId  String
+  user    User                @relation(fields: [userId], references: [id])
+  type    NotificationType
+  channel NotificationChannel @default(IN_APP)
+  title   String
+  message String
+  isRead  Boolean             @default(false)
+  readAt  DateTime?
+
+  referenceType String?
+  referenceId   String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+enum FileCategory {
+  INVOICE
+  PURCHASE_DOCUMENT
+  QUALITY_IMAGE
+  PRODUCTION_REPORT
+  MACHINE_DOCUMENT
+  MAINTENANCE_DOCUMENT
+  CUSTOMER_DOCUMENT
+  OTHER
+}
+
+/// Large files live in object storage; only the reference/metadata is in Postgres —
+/// SRS §15.1.
+model FileAsset {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  fileName   String
+  mimeType   String
+  sizeBytes  Int
+  storageKey String
+  category   FileCategory
+
+  referenceType String?
+  referenceId   String?
+
+  uploadedBy String
+  uploader   User   @relation(fields: [uploadedBy], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, referenceType, referenceId])
+  @@map("file_assets")
+}
+
+enum AuditAction {
+  LOGIN
+  LOGOUT
+  CREATE
+  UPDATE
+  DELETE
+  APPROVE
+  REJECT
+  EXPORT
+  PERMISSION_CHANGE
+  CONFIG_CHANGE
+}
+
+/// SRS §15.2 — records all significant user/system activity.
+model AuditLog {
+  id       String  @id @default(cuid())
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+
+  userId String?
+  user   User?       @relation(fields: [userId], references: [id])
+  action AuditAction
+
+  entityType String?
+  entityId   String?
+  oldValue   Json?
+  newValue   Json?
+
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, createdAt])
+  @@map("audit_logs")
+}
+
+enum SyncStatus {
+  PENDING
+  SYNCED
+  FAILED
+  CONFLICT
+}
+
+/// Reserved shape for the offline sync engine (SRS §13) — built out in the dedicated
+/// Offline roadmap phase (D-011); schema included now so later work doesn't require a
+/// migration that touches every offline-eligible table.
+model SyncEvent {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  localId      String
+  serverId     String?
+  userId       String
+  user         User       @relation(fields: [userId], references: [id])
+  entityType   String
+  payload      Json
+  syncStatus   SyncStatus @default(PENDING)
+  retryCount   Int        @default(0)
+  errorMessage String?
+
+  createdAt DateTime  @default(now())
+  syncedAt  DateTime?
+
+  @@unique([tenantId, userId, localId])
+  @@index([tenantId, syncStatus])
+  @@map("sync_events")
+}

@@ -1,0 +1,46 @@
+{
+  "name": "abytetex",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AbyteTex — Textile Manufacturing Management Platform (multi-tenant SaaS)",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run start:dev --workspace=apps/api",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "dev:worker": "npm run start:dev --workspace=apps/worker",
+    "build": "npm run build --workspace=packages/types && npm run build --workspace=packages/validation && npm run build --workspace=apps/api && npm run build --workspace=apps/web",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "prisma:generate": "prisma generate --schema=prisma/schema.prisma",
+    "prisma:migrate": "prisma migrate dev --schema=prisma/schema.prisma",
+    "prisma:deploy": "prisma migrate deploy --schema=prisma/schema.prisma",
+    "prisma:seed": "ts-node --project prisma/tsconfig.json prisma/seed.ts",
+    "prisma:studio": "prisma studio --schema=prisma/schema.prisma"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.11",
+    "prisma": "^5.20.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "allowScripts": {
+    "@prisma/engines@5.22.0": true,
+    "prisma@5.22.0": true,
+    "@prisma/client@5.22.0": true,
+    "@nestjs/core@10.4.22": true,
+    "argon2@0.41.1": true,
+    "msgpackr-extract@3.0.4": true
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0"
+  },
+  "prisma": {
+    "seed": "ts-node --project prisma/tsconfig.json prisma/seed.ts"
+  }
+}
