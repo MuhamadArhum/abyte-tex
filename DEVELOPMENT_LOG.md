@@ -4,6 +4,45 @@ Reverse-chronological. Each entry: what shipped, what changed, what's still open
 
 ---
 
+## 2026-09-12 — Backend for every remaining core module (Phases 3–5)
+
+At the user's request to "build all the modules," implemented the backend for everything that previously had schema-only support: Shifts, Machines, Employees, Attendance, Sales Orders, a shared Inventory ledger service, Procurement (Purchase Requests/Orders, Goods Receipts), Production (Process Routes, Production Orders, Batches, Material Consumption), Downtime, Quality (Inspection Templates, Inspections, Defects), Maintenance (Jobs, Preventive Schedules), Dispatch, Costing, Payroll, Notifications, and Dashboards (real aggregation queries, not placeholders).
+
+### Architecture notes
+- **`InventoryService` is the single point of truth for touching stock** (`apps/api/src/inventory/`). Procurement's goods receipt, Production's material consumption and batch output, and Dispatch all call through `recordMovement()`/`transferStock()` rather than writing `Stock`/`StockMovement` rows themselves — this is what SRS §8.3 ("stock shall never be changed silently") actually requires in practice, and it's also what caught the bug below.
+- **Automatic corrective maintenance** (SRS §9.3): `DowntimeService.create()` checks the downtime category, and for MECHANICAL/ELECTRICAL (genuine breakdowns) auto-creates a `MaintenanceJob` (type CORRECTIVE, linked via `downtimeId`) and flips the machine to BREAKDOWN status — no separate trigger/queue needed, it's inline in the same transaction.
+- Every `orderNumber`/`batchNumber`/etc. is generated server-side (`SO-000001`, `PRO-000001`, `BATCH-000001`, …) via a simple count-based sequence — documented as good-enough-for-MVP rather than a robust distributed sequence (race condition on concurrent creates is a known, accepted limitation at this scale).
+- Sales/Purchase/Production order status changes are accepted for any value in the enum with no state-machine enforcement yet — see D-022. This was a deliberate scope cut, not an oversight.
+
+### Verified — full end-to-end business cycle run against the live API and database
+Not just unit-level checks: ran the actual operational chain a factory would follow, in order, against the running dev API:
+1. Received 1000 KG of raw material into stock (manual RECEIVE).
+2. Created a Sales Order (100 MTR, auto-computed subtotal/total correct).
+3. Created a Production Order linked to that Sales Order.
+4. Consumed 120 KG of material against the Production Order — confirmed the material stock balance actually decremented (1000 → 880).
+5. Created a Production Batch, recorded its output (98 good / 2 wastage) — confirmed the *finished product* stock balance was correctly created via the linked `PRODUCTION_RECEIPT` movement.
+6. Dispatched 98 units against the Sales Order — this is where a real bug was found (below).
+7. Queried the Owner/Production/Inventory dashboards and confirmed the numbers reflected the exact activity above (98 units produced today, 880 KG raw material remaining, 1 pending sales order, etc.) — these are real Prisma aggregations, not mocked data.
+
+### Bug found and fixed
+**Dispatching (or any stock-out movement) without specifying a batch number created a phantom duplicate stock row instead of decrementing the real one, silently netting a product's visible stock to zero.** Production had tagged the 98-unit output with `batchNumber: 'BATCH-000001'`; the dispatch's ISSUE movement didn't specify a batch, and the original matching logic required an *exact* batch match (including matching `null` to `null`) — so it found no existing row, created a new one at `-98`, and the two rows summed to zero. A live dashboard query (`totalFinishedGoodsUnits: 0` right after producing 98 units) is what exposed it. Root-caused and fixed in `InventoryService.recordMovement`: an unbatched request now matches *any* existing row for that item (oldest first), only requiring an exact batch match when the caller actually names one. Re-verified with a fresh produce→issue cycle: the unbatched issue correctly drew down the named-batch row. Documented as D-023. The phantom row from the original repro was deleted from the demo tenant's data rather than left as misleading history.
+
+### Also fixed along the way (caught by `tsc`/`eslint`, not runtime)
+- The recurring "Prisma extension injects `tenantId` at runtime but the generated TS input types still require it explicitly" pattern from Phase 1 (D-015's addendum) recurred in `InventoryService`, `sales.service.ts`, `procurement.service.ts`, `downtime.service.ts` — same fix each time (spell out `tenantId` in the `data` object; narrow it to a local `const` before an async transaction closure, since TS discards property narrowing across a function boundary).
+- A real TS compile error caught a genuine mistake before it shipped: `payroll.service.ts`'s upsert `create` block set `employeeId` explicitly *and* spread `...dto` (which also has `employeeId`) — harmless in this case since both were the same value, but TS's "specified more than once" error is exactly the kind of thing worth having as a hard compile failure rather than a silent no-op overwrite.
+
+### Verified (build/lint)
+`nest build` and `eslint --fix` run clean after every 2–3 module batch (not just once at the end) — this is what kept each round of fixes small and localized rather than one large end-of-session cleanup.
+
+### Open / Next
+1. Frontend UI for everything built in this entry — currently API-only. Given the size, prioritize Sales Orders and Production (the core operational modules SRS calls out) first.
+2. Automated tests — still the single biggest gap. Two real bugs in two sessions (tenant-context/RBAC, now stock-matching) were both caught only by manual end-to-end runs; a regression suite covering these exact flows would catch a reintroduction automatically.
+3. Sales/Purchase/Production order status transitions need real state-machine rules once validated against actual factory workflows (D-022).
+4. HR: Attendance/Payroll UI, and the Employee/Machine/Shift master-data screens.
+5. File uploads (§15.1), offline/PWA (§13), Abyte AI (§14) — all still out of scope, as previously documented.
+
+---
+
 ## 2026-09-11/12 — Phase 1: Foundation (repo scaffold, database, auth, RBAC, core platform APIs)
 
 ### What was implemented

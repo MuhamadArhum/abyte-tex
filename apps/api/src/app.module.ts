@@ -27,6 +27,22 @@ import { ProductsModule } from './products/products.module';
 import { MaterialsModule } from './materials/materials.module';
 import { CustomersModule } from './customers/customers.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
+import { ShiftsModule } from './shifts/shifts.module';
+import { MachinesModule } from './machines/machines.module';
+import { EmployeesModule } from './employees/employees.module';
+import { AttendanceModule } from './attendance/attendance.module';
+import { SalesModule } from './sales/sales.module';
+import { InventoryModule } from './inventory/inventory.module';
+import { ProcurementModule } from './procurement/procurement.module';
+import { ProductionModule } from './production/production.module';
+import { DowntimeModule } from './downtime/downtime.module';
+import { QualityModule } from './quality/quality.module';
+import { MaintenanceModule } from './maintenance/maintenance.module';
+import { DispatchModule } from './dispatch/dispatch.module';
+import { CostingModule } from './costing/costing.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { PayrollModule } from './payroll/payroll.module';
+import { DashboardsModule } from './dashboards/dashboards.module';
 import { HealthModule } from './health/health.module';
 
 @Module({
@@ -52,6 +68,22 @@ import { HealthModule } from './health/health.module';
     MaterialsModule,
     CustomersModule,
     SuppliersModule,
+    ShiftsModule,
+    MachinesModule,
+    EmployeesModule,
+    AttendanceModule,
+    SalesModule,
+    InventoryModule,
+    ProcurementModule,
+    ProductionModule,
+    DowntimeModule,
+    QualityModule,
+    MaintenanceModule,
+    DispatchModule,
+    CostingModule,
+    NotificationsModule,
+    PayrollModule,
+    DashboardsModule,
     HealthModule,
   ],
   providers: [
