@@ -9,6 +9,15 @@ import {
   ShieldCheck,
   UserCog,
   Building2,
+  ShoppingCart,
+  ClipboardList,
+  Cog,
+  Warehouse,
+  Send,
+  ShieldCheck as QualityIcon,
+  Wrench,
+  UserSquare2,
+  CalendarCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -33,12 +42,40 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [{ label: "Dashboard", href: "/", icon: LayoutDashboard }],
   },
   {
+    label: "Commercial",
+    items: [
+      { label: "Sales Orders", href: "/sales", icon: ShoppingCart, requires: { resource: Resource.SALES_ORDER, action: Action.VIEW } },
+      { label: "Purchase Orders", href: "/purchase-orders", icon: ClipboardList, requires: { resource: Resource.PURCHASE_ORDER, action: Action.VIEW } },
+      { label: "Dispatches", href: "/dispatches", icon: Send, requires: { resource: Resource.DISPATCH, action: Action.VIEW } },
+    ],
+  },
+  {
+    label: "Production",
+    items: [
+      { label: "Production Orders", href: "/production-orders", icon: Cog, requires: { resource: Resource.PRODUCTION_ORDER, action: Action.VIEW } },
+      { label: "Machines & Looms", href: "/machines", icon: Factory, requires: { resource: Resource.MACHINE, action: Action.VIEW } },
+      { label: "Quality", href: "/quality", icon: QualityIcon, requires: { resource: Resource.QUALITY_INSPECTION, action: Action.VIEW } },
+      { label: "Maintenance", href: "/maintenance", icon: Wrench, requires: { resource: Resource.MAINTENANCE_JOB, action: Action.VIEW } },
+    ],
+  },
+  {
+    label: "Inventory",
+    items: [{ label: "Stock & Movements", href: "/inventory", icon: Warehouse, requires: { resource: Resource.STOCK, action: Action.VIEW } }],
+  },
+  {
     label: "Master Data",
     items: [
       { label: "Products", href: "/products", icon: Package, requires: { resource: Resource.PRODUCT, action: Action.VIEW } },
       { label: "Materials", href: "/materials", icon: Boxes, requires: { resource: Resource.MATERIAL, action: Action.VIEW } },
       { label: "Customers", href: "/customers", icon: Users2, requires: { resource: Resource.CUSTOMER, action: Action.VIEW } },
       { label: "Suppliers", href: "/suppliers", icon: Truck, requires: { resource: Resource.SUPPLIER, action: Action.VIEW } },
+    ],
+  },
+  {
+    label: "HR",
+    items: [
+      { label: "Employees", href: "/employees", icon: UserSquare2, requires: { resource: Resource.EMPLOYEE, action: Action.VIEW } },
+      { label: "Attendance", href: "/attendance", icon: CalendarCheck, requires: { resource: Resource.ATTENDANCE, action: Action.VIEW } },
     ],
   },
   {

@@ -145,3 +145,30 @@ The previous entry flagged "not clicked through in a real browser" as the top op
 
 ### Takeaway
 This is the second time in this project that "compiles, lints, and builds clean" turned out not to mean "works" — the first was the tenant-context/RBAC bugs in Phase 1. Both were caught only by actually running the software (against a real DB, in a real rendered browser) and trying the exact thing a user would do. This reinforces the standing rule for this project: a feature isn't `Done` in the traceability doc until it's been exercised, not just built.
+
+---
+
+## 2026-09-13 — Frontend UI for every remaining backend module
+
+The Phase 3–5 backend modules (Sales, Procurement, Production, Inventory, Dispatch, Quality, Maintenance, Machines, Employees, Attendance) had been API-only since the 2026-09-12 backend push. Built the frontend for all of them in one batch.
+
+### What was implemented
+- **Sales**: list + multi-line-item create form (product select auto-fills unit, computes total client-side); detail page with items table and a status-change dropdown.
+- **Procurement**: list + multi-item create form; detail page with an inline "Receive Goods" sheet (per-item received/accepted/rejected quantities against remaining balance).
+- **Production Orders**: list + create form; detail page with Start Batch, Record Output (optional receiving warehouse), and Record Material Consumption sheets — all wired to the same `InventoryService`-backed endpoints verified against the live DB in the prior session.
+- **Inventory**: a single page with Stock Levels / Movement Ledger tabs (filterable by factory→warehouse), plus manual Record Movement (RECEIVE/ISSUE/ADJUSTMENT/RETURN, sign derived server-side) and Transfer sheets.
+- **Dispatch**: create form selects a sales order and surfaces only its undelivered items for quantity entry, mirroring the Goods Receipt pattern.
+- **Quality**: inspection form covering the textile-specific fields (GSM, width, shade, roll length, weight, color variation, stitching defects) plus a repeatable defects list (type/severity/quantity).
+- **Maintenance**: job creation (preventive) + a status-change dropdown (OPEN → IN_PROGRESS → COMPLETED/CANCELLED) that also stamps startedAt/completedAt.
+- **Machines, Employees, Attendance**: standard list + create/edit patterns matching the rest of the app; Attendance additionally has a mark-attendance sheet with check-in/check-out time inputs.
+- **Dashboard home rewritten**: the six real dashboard-aggregation endpoints (Owner/Production/Machine/Inventory/Quality/Maintenance) are now rendered as tabbed `StatCard` grids instead of the previous quick-links-only home page.
+- New shared `StatCard` component (`components/shared/stat-card.tsx`) for the dashboard grids.
+
+### Verified
+- `tsc --noEmit`, `eslint`, and a full `next build` — all clean, all 26 routes (18 static, 3 dynamic detail pages, plus the pre-existing auth/admin routes) compile and prerender successfully.
+- **Not yet verified**: actual rendering/interaction in a real browser. The 2026-09-12 Playwright pass only exercised Phase 1–2 screens; per the standing takeaway above, this batch is not "done" until it's been clicked through the same way — this is the immediate next step.
+
+### Open / Next
+1. Browser-test this batch with Playwright the same way Phase 1–2 was tested, watching specifically for the kind of bug that static analysis can't catch (D-021, D-023 were both this way).
+2. Frontend UI for Costing and Payroll (still API-only).
+3. Automated tests — still none.
