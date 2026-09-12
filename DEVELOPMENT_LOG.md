@@ -82,7 +82,27 @@ Reverse-chronological. Each entry: what shipped, what changed, what's still open
 - **Not verified**: actual rendering and interaction in a real browser. No browser automation tool was available in this session (the Chrome extension prompt was declined). Static analysis, the build, and the server-side/API-contract checks above are strong signals but are not a substitute for actually clicking through the app — treat the UI as unverified for visual/interaction bugs (layout issues, a broken click handler, etc.) until someone opens it in a browser.
 
 ### Open / Next
-1. **Manually click through the app in a browser** — this is the one verification step this session could not do. Priority: login → dashboard → invite a user → have them set a password and log in → try each CRUD screen.
-2. Automated tests (still none, frontend or backend).
-3. Phase 3 backend + UI: Sales, Procurement, Inventory, Production.
-4. Dashboards/reports (§12) — the current dashboard home is just quick-links, not the KPI dashboards the SRS describes; those need real aggregation endpoints first.
+1. Automated tests (still none, frontend or backend) — see the bug found below for exactly why this matters.
+2. Phase 3 backend + UI: Sales, Procurement, Inventory, Production.
+3. Dashboards/reports (§12) — the current dashboard home is just quick-links, not the KPI dashboards the SRS describes; those need real aggregation endpoints first.
+
+---
+
+## 2026-09-12 — Actual browser verification (Playwright) + one real bug found and fixed
+
+The previous entry flagged "not clicked through in a real browser" as the top open item. No browser automation tool was available in-session (the user declined the Chrome extension install), so this was done a different way: installed Playwright + headless Chromium ad hoc (`npx playwright install chromium`, `npm install --no-save playwright`) and drove the actual running app (`localhost:3000`) against the actual running API (`localhost:4000`) with real scripts, capturing console errors, failed requests, and screenshots.
+
+### What was verified, for real, in a rendered browser
+- Login (correct + wrong password), full dashboard render with correct role-aware sidebar for a Company Owner.
+- Every list page (Products, Materials, Customers, Suppliers, Factories, Users, Roles, Company Settings) renders with correct labels and live data.
+- Factory detail page navigation, and its Overview/Departments/Warehouses tabs.
+- Creating a Customer through the actual Sheet form, seeing it appear in the list, and re-opening it pre-filled for edit.
+- Client-side required-field validation on the Product form (submit empty → inline errors, no request sent).
+- RBAC in the actual rendered UI: a VIEWER-role user sees the same nav as Company Owner (by design — Viewer has read-only access to everything, including Users/Roles) but the "Add Product" button is correctly absent from the Products page.
+- Visual quality: screenshots confirm a clean, professional layout — sidebar, tables, badges, form sheets all rendering as designed, not a "generated dashboard" look.
+
+### Bug found and fixed
+**Creating a Customer/Supplier/Factory with the optional email field left blank failed with a 400** ("email must be an email"). Root cause: react-hook-form reports an untouched optional text input as `""`, not `undefined`; the API's `@IsOptional() @IsEmail()` only treats `null`/`undefined` as "not provided," so `""` reached `@IsEmail()` and failed it. This was invisible to `tsc`, `eslint`, and `next build` — only surfaced by actually submitting the form. Fixed centrally in `apiFetch` (`apps/web/src/lib/api-client.ts`): every request body now has empty-string values converted to `undefined` before being sent, which fixes this for every current form and any future one, and incidentally stops other optional fields from storing `""` instead of `null`. Re-verified after the fix: Customer, Supplier, and Factory creation with blank optional fields all succeed. Documented as D-021.
+
+### Takeaway
+This is the second time in this project that "compiles, lints, and builds clean" turned out not to mean "works" — the first was the tenant-context/RBAC bugs in Phase 1. Both were caught only by actually running the software (against a real DB, in a real rendered browser) and trying the exact thing a user would do. This reinforces the standing rule for this project: a feature isn't `Done` in the traceability doc until it's been exercised, not just built.

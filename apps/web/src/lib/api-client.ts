@@ -54,6 +54,26 @@ interface RequestOptions extends Omit<RequestInit, "body"> {
 }
 
 /**
+ * Converts empty-string values in a flat request body to `undefined` (dropped
+ * by JSON.stringify) before it's sent. react-hook-form reports every untouched
+ * optional text input as `""`, not `undefined` — but the API's DTOs use
+ * `@IsOptional()`, which class-validator only treats as "not provided" for
+ * `null`/`undefined`, not `""`. Left unfixed, any optional `@IsEmail()` field
+ * (Customer/Supplier email, Factory contact email, …) left blank in a form
+ * fails with a 400 ("email must be an email") instead of being omitted — this
+ * was caught by an actual headless-browser run of the create-customer flow,
+ * not by any static check.
+ */
+function stripEmptyStrings(body: unknown): unknown {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return body;
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
+    result[key] = value === "" ? undefined : value;
+  }
+  return result;
+}
+
+/**
  * Thin fetch wrapper: attaches the in-memory access token, always sends
  * credentials (so the API's httpOnly refresh cookie is included even though
  * the frontend and API are different origins in dev), unwraps the API's
@@ -72,7 +92,7 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...headers,
     },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: body !== undefined ? JSON.stringify(stripEmptyStrings(body)) : undefined,
   });
 
   if (res.status === 401 && !_isRetry && !path.startsWith("/auth/")) {
