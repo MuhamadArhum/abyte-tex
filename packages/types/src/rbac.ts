@@ -57,6 +57,7 @@ export enum Resource {
   MAINTENANCE_JOB = 'maintenance_job',
   EMPLOYEE = 'employee',
   ATTENDANCE = 'attendance',
+  SHIFT = 'shift',
   PAYROLL = 'payroll',
   COST_SHEET = 'cost_sheet',
   REPORT = 'report',

@@ -190,3 +190,27 @@ Fixed at every call site (~20 files) by passing the resolved label explicitly as
 
 ### Takeaway
 This is the fourth real bug in this project (after D-015's tenant-isolation gap, D-021's blank-email validation, and D-023's phantom stock row) caught only by actually running the software — and the most widespread yet, since it silently affected essentially every foreign-key-referencing dropdown in the entire application, old and new. The pattern holds: "compiles, lints, and builds clean" keeps meaning "type-correct," not "correct." Reinforces the standing rule — a feature isn't `Done` until someone has actually looked at what it renders after a real interaction, not just that the request succeeded.
+
+---
+
+## 2026-09-13 — Remaining modules given UI (Shifts, Downtime, Costing, Payroll, Notifications); a fifth real bug found and fixed (D-025)
+
+Closed out the last API-only modules with frontend UI: Shifts (a new tab on the Factory detail page, matching its nested-under-factory API shape), Downtime (log + close, with a note that MECHANICAL/ELECTRICAL categories auto-create a maintenance job), Costing (cost sheet creation with optional Production Order → Batch drill-down), Payroll (period list, create, detail page with per-employee entries and a status-change workflow), and a notifications bell in the topbar (unread badge, mark-read, mark-all-read, polling every 60s).
+
+Also discovered that `Resource.SHIFT` existed in the backend's own RBAC enum (`apps/api/src/common/rbac.constants.ts`) but had never been added to the shared `packages/types/src/rbac.ts` enum the frontend imports — so the frontend literally could not reference it. Fixed by adding it there too (values now match exactly between both enums).
+
+### Bug found and fixed (D-025)
+**The Shifts tab's "Add Shift" button silently never rendered for the demo tenant**, even logged in as Company Owner (defined as "every action on every resource"). Root cause: a tenant's role permissions are written once into the database at tenant-creation time (`role-seed.util.ts`), from whatever the `DEFAULT_ROLE_PERMISSIONS` constant looked like *at that moment*. `Resource.SHIFT` was added to that constant after the demo tenant already existed, so its Company Owner role's permission rows simply never got `shift:*` entries — nothing errored, nothing logged, the button just wasn't there. Confirmed directly: querying `GET /auth/session` for the demo owner showed zero `shift:` entries in `allow` despite the role being "all actions, all resources" by definition.
+Fixed at the root, not just for this one tenant: added `PermissionBackfillService` (`apps/api/src/roles/permission-backfill.service.ts`), an `OnModuleInit` that runs once per API boot and additively inserts any `DEFAULT_ROLE_PERMISSIONS` rows a tenant's system role is missing, via `createMany({ skipDuplicates: true })` — so it can only add rows, never remove or overwrite a tenant's later customization of a role. This means the *next* time a `Resource` is added to the catalog, every existing tenant picks it up automatically on the next deploy, instead of silently losing access to the new module the way this one did.
+**Why — found by clicking the actual Shifts tab, not a static check:** `tsc`, `eslint`, and the production build all passed the whole time; the RBAC gap only showed up as "the button just isn't there" in a real rendered browser, and only made sense once the session's live permission list was queried directly against the API.
+
+### Verified
+- `tsc --noEmit`, `eslint` (both `apps/web` and `apps/api`), and `nest build` all clean.
+- `next build`: 29 routes, including the new `/downtime`, `/costing`, `/payroll`, `/payroll/[id]`.
+- Browser-driven (Playwright): Downtime and Payroll create-forms both resolve Select labels correctly (no raw-ID regression, per D-024's fix pattern applied to every new form here too); Payroll period creation actually persists and its detail page renders entries; the Shifts tab and its Add Shift form render correctly after the RBAC backfill restart; the payroll unique-period constraint correctly 409s on a genuine duplicate (verified against the schema, not assumed).
+- Noted, not fixed: Base UI logs a dev-console "uncontrolled → controlled" warning on Selects whose value starts `undefined` and later becomes a string (a side effect of the D-024 fix). Cosmetic only — no functional or visual impact confirmed — and deliberately left as-is rather than re-touching ~40 call sites for a console-only warning.
+
+### Open / Next
+1. Automated tests — still none; every bug found so far (five now) was caught by manual or scripted browser/API testing.
+2. Offline/PWA (§13), Abyte AI (§14), file uploads (§15.1), notification trigger wiring (the `notify()` hook still has no producer calling it), production infrastructure (Nginx, CI/CD, backups) — all still deliberately deferred.
+3. The dev-console controlled/uncontrolled Select warning noted above, if it's ever worth the ~40-site cleanup.

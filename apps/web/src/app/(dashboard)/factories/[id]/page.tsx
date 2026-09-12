@@ -26,6 +26,10 @@ import { WarehouseLocationsPanel } from "@/features/factories/warehouse-location
 import type { CreateDepartmentInput, CreateWarehouseInput, Department, Warehouse } from "@/features/factories/types";
 import { nullsToUndefined } from "@/lib/utils";
 import { ArrowLeft, Loader2, Plus } from "lucide-react";
+import { useCreateShift, useShifts } from "@/features/shifts/hooks";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import type { CreateShiftInput, Shift } from "@/features/shifts/api";
 
 export default function FactoryDetailPage() {
   const params = useParams<{ id: string }>();
@@ -38,12 +42,15 @@ export default function FactoryDetailPage() {
 
   const [deptSheetOpen, setDeptSheetOpen] = useState(false);
   const [whSheetOpen, setWhSheetOpen] = useState(false);
+  const [shiftSheetOpen, setShiftSheetOpen] = useState(false);
   const [expandedWarehouse, setExpandedWarehouse] = useState<Warehouse | null>(null);
 
   const { data: departments, isLoading: deptLoading } = useDepartments(factoryId);
   const { data: warehouses, isLoading: whLoading } = useWarehouses(factoryId);
+  const { data: shifts, isLoading: shiftsLoading } = useShifts(factoryId);
   const createDept = useCreateDepartment(factoryId);
   const createWh = useCreateWarehouse(factoryId);
+  const createShift = useCreateShift(factoryId);
 
   if (isLoading) {
     return (
@@ -70,6 +77,12 @@ export default function FactoryDetailPage() {
     { header: "Type", cell: (w) => w.type.replaceAll("_", " ") },
   ];
 
+  const shiftColumns: Column<Shift>[] = [
+    { header: "Name", cell: (s) => <span className="font-medium">{s.name}</span> },
+    { header: "Start", cell: (s) => s.startTime },
+    { header: "End", cell: (s) => s.endTime },
+  ];
+
   return (
     <div>
       <Button variant="ghost" size="sm" className="mb-2 -ml-2" onClick={() => router.push("/factories")}>
@@ -86,6 +99,7 @@ export default function FactoryDetailPage() {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="departments">Departments</TabsTrigger>
           <TabsTrigger value="warehouses">Warehouses</TabsTrigger>
+          <TabsTrigger value="shifts">Shifts</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4 max-w-lg">
@@ -139,6 +153,23 @@ export default function FactoryDetailPage() {
             emptyMessage="No warehouses yet."
           />
         </TabsContent>
+
+        <TabsContent value="shifts" className="mt-4">
+          <div className="mb-3 flex justify-end">
+            {can(Resource.SHIFT, Action.CREATE) && (
+              <Button size="sm" onClick={() => setShiftSheetOpen(true)}>
+                <Plus className="h-4 w-4" /> Add Shift
+              </Button>
+            )}
+          </div>
+          <DataTable
+            columns={shiftColumns}
+            data={shifts?.data ?? []}
+            isLoading={shiftsLoading}
+            rowKey={(s) => s.id}
+            emptyMessage="No shifts yet."
+          />
+        </TabsContent>
       </Tabs>
 
       <Sheet open={deptSheetOpen} onOpenChange={setDeptSheetOpen}>
@@ -167,6 +198,18 @@ export default function FactoryDetailPage() {
         </SheetContent>
       </Sheet>
 
+      <Sheet open={shiftSheetOpen} onOpenChange={setShiftSheetOpen}>
+        <SheetContent className="flex flex-col gap-0 p-4 sm:max-w-md">
+          <SheetHeader className="px-1">
+            <SheetTitle>Add Shift</SheetTitle>
+          </SheetHeader>
+          <ShiftForm
+            isSubmitting={createShift.isPending}
+            onSubmit={(values) => createShift.mutate(values, { onSuccess: () => setShiftSheetOpen(false) })}
+          />
+        </SheetContent>
+      </Sheet>
+
       <Sheet open={!!expandedWarehouse} onOpenChange={(open) => !open && setExpandedWarehouse(null)}>
         <SheetContent className="flex flex-col gap-0 p-4 sm:max-w-md">
           <SheetHeader className="px-1">
@@ -177,6 +220,44 @@ export default function FactoryDetailPage() {
           )}
         </SheetContent>
       </Sheet>
+    </div>
+  );
+}
+
+function ShiftForm({ onSubmit, isSubmitting }: { onSubmit: (values: CreateShiftInput) => void; isSubmitting?: boolean }) {
+  const [name, setName] = useState("");
+  const [startTime, setStartTime] = useState("08:00");
+  const [endTime, setEndTime] = useState("17:00");
+
+  const canSubmit = name.trim() && startTime && endTime;
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex-1 space-y-4 px-1 pb-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="shift-name">Name *</Label>
+          <Input id="shift-name" placeholder="Morning Shift" value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="shift-start">Start time *</Label>
+            <Input id="shift-start" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="shift-end">End time *</Label>
+            <Input id="shift-end" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+          </div>
+        </div>
+      </div>
+      <div className="flex justify-end gap-2 border-t pt-4">
+        <Button
+          disabled={!canSubmit || isSubmitting}
+          onClick={() => canSubmit && onSubmit({ name: name.trim(), startTime, endTime })}
+        >
+          {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+          Create shift
+        </Button>
+      </div>
     </div>
   );
 }

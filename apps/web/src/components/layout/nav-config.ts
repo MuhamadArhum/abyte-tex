@@ -18,6 +18,9 @@ import {
   Wrench,
   UserSquare2,
   CalendarCheck,
+  AlertTriangle,
+  Calculator,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 
@@ -56,6 +59,8 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Machines & Looms", href: "/machines", icon: Factory, requires: { resource: Resource.MACHINE, action: Action.VIEW } },
       { label: "Quality", href: "/quality", icon: QualityIcon, requires: { resource: Resource.QUALITY_INSPECTION, action: Action.VIEW } },
       { label: "Maintenance", href: "/maintenance", icon: Wrench, requires: { resource: Resource.MAINTENANCE_JOB, action: Action.VIEW } },
+      { label: "Downtime", href: "/downtime", icon: AlertTriangle, requires: { resource: Resource.DOWNTIME, action: Action.VIEW } },
+      { label: "Costing", href: "/costing", icon: Calculator, requires: { resource: Resource.COST_SHEET, action: Action.VIEW } },
     ],
   },
   {
@@ -76,6 +81,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "Employees", href: "/employees", icon: UserSquare2, requires: { resource: Resource.EMPLOYEE, action: Action.VIEW } },
       { label: "Attendance", href: "/attendance", icon: CalendarCheck, requires: { resource: Resource.ATTENDANCE, action: Action.VIEW } },
+      { label: "Payroll", href: "/payroll", icon: Wallet, requires: { resource: Resource.PAYROLL, action: Action.VIEW } },
     ],
   },
   {
