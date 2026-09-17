@@ -7,7 +7,7 @@ import { z } from 'zod';
  */
 export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  API_PORT: z.coerce.number().int().positive().default(4000),
+  API_PORT: z.coerce.number().int().positive().default(3012),
   API_URL: z.string().url(),
   CORS_ORIGIN: z.string().min(1),
 
