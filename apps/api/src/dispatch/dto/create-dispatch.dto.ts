@@ -18,6 +18,8 @@ export class CreateDispatchDto {
   @IsOptional() @IsString() driverName?: string;
   @IsOptional() @IsString() driverPhone?: string;
   @IsOptional() @IsString() deliveryAddress?: string;
+  /** P1 remediation (API-005): optional client-generated key — a retried request with the same key returns the original dispatch instead of creating a second one. */
+  @IsOptional() @IsString() idempotencyKey?: string;
 
   @IsArray()
   @ArrayMinSize(1)

@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { TenantContextStore } from '../common/tenant-context';
+import { assertFactoryAccess, factoryScopeFilter } from '../common/factory-access.util';
 import { buildPaginationMeta } from '../common/dto/pagination.dto';
 import { MarkAttendanceDto, UpdateAttendanceDto } from './dto/attendance.dto';
 import { ListAttendanceQueryDto } from './dto/list-attendance-query.dto';
@@ -19,6 +20,7 @@ export class AttendanceService {
 
     const employee = await this.prisma.db.employee.findUnique({ where: { id: dto.employeeId } });
     if (!employee) throw new NotFoundException('Employee not found');
+    assertFactoryAccess(ctx, employee.factoryId);
 
     const date = new Date(dto.date);
     const existing = await this.prisma.db.attendance.findFirst({ where: { employeeId: dto.employeeId, date } });
@@ -46,8 +48,10 @@ export class AttendanceService {
   }
 
   async list(query: ListAttendanceQueryDto) {
+    const ctx = TenantContextStore.getOrThrow();
+    if (query.factoryId) assertFactoryAccess(ctx, query.factoryId);
     const where = {
-      ...(query.factoryId ? { factoryId: query.factoryId } : {}),
+      ...factoryScopeFilter(ctx, query.factoryId),
       ...(query.employeeId ? { employeeId: query.employeeId } : {}),
       ...(query.date ? { date: new Date(query.date) } : {}),
     };
@@ -71,6 +75,7 @@ export class AttendanceService {
       include: { employee: { select: { id: true, firstName: true, lastName: true, employeeCode: true } } },
     });
     if (!attendance) throw new NotFoundException('Attendance record not found');
+    assertFactoryAccess(TenantContextStore.getOrThrow(), attendance.factoryId);
     return attendance;
   }
 

@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -17,7 +19,11 @@ import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth-store";
 import { Action, Resource } from "@abytetex/types";
 import { useSalesOrder, useUpdateSalesOrderStatus } from "@/features/sales/hooks";
-import { SALES_ORDER_STATUSES, type SalesOrderStatus } from "@/features/sales/api";
+import {
+  SALES_ORDER_ALLOWED_NEXT_STATUSES,
+  SALES_ORDER_DESTRUCTIVE_STATUSES,
+  type SalesOrderStatus,
+} from "@/features/sales/api";
 import { ArrowLeft, ChevronDown, Loader2 } from "lucide-react";
 
 export default function SalesOrderDetailPage() {
@@ -26,11 +32,23 @@ export default function SalesOrderDetailPage() {
   const can = useAuthStore((s) => s.can);
   const { data, isLoading } = useSalesOrder(params.id);
   const statusMutation = useUpdateSalesOrderStatus(params.id);
+  const [pendingStatus, setPendingStatus] = useState<SalesOrderStatus | null>(null);
 
   if (isLoading) return <div className="flex h-40 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
   if (!data?.data) return <p className="text-sm text-muted-foreground">Sales order not found.</p>;
 
   const o = data.data;
+  // P1 remediation (Step 15 / FE-013): only offer legal next transitions, mirroring the
+  // backend's own transition map — the backend still rejects anything else regardless.
+  const allowedNext = SALES_ORDER_ALLOWED_NEXT_STATUSES[o.status] ?? [];
+
+  function requestStatusChange(next: SalesOrderStatus) {
+    if (SALES_ORDER_DESTRUCTIVE_STATUSES.has(next)) {
+      setPendingStatus(next);
+    } else {
+      statusMutation.mutate(next);
+    }
+  }
 
   return (
     <div>
@@ -43,14 +61,14 @@ export default function SalesOrderDetailPage() {
         actions={
           <div className="flex items-center gap-2">
             <StatusBadge status={o.status} />
-            {can(Resource.SALES_ORDER, Action.APPROVE) && (
+            {can(Resource.SALES_ORDER, Action.APPROVE) && allowedNext.length > 0 && (
               <DropdownMenu>
                 <DropdownMenuTrigger className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
                   Change status <ChevronDown className="h-3.5 w-3.5" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  {SALES_ORDER_STATUSES.filter((s) => s !== o.status).map((s: SalesOrderStatus) => (
-                    <DropdownMenuItem key={s} onClick={() => statusMutation.mutate(s)}>
+                  {allowedNext.map((s) => (
+                    <DropdownMenuItem key={s} onClick={() => requestStatusChange(s)}>
                       {s.replaceAll("_", " ")}
                     </DropdownMenuItem>
                   ))}
@@ -59,6 +77,23 @@ export default function SalesOrderDetailPage() {
             )}
           </div>
         }
+      />
+
+      <ConfirmDialog
+        open={pendingStatus !== null}
+        onOpenChange={(open) => !open && setPendingStatus(null)}
+        title={`${pendingStatus === "CANCELLED" ? "Cancel" : "Complete"} Sales Order ${o.orderNumber}?`}
+        description={
+          pendingStatus === "CANCELLED"
+            ? "This cancels the order. Cancelled orders cannot be reopened."
+            : "This marks the order as completed. Completed orders cannot be reopened."
+        }
+        confirmLabel={pendingStatus === "CANCELLED" ? "Cancel Order" : "Complete Order"}
+        destructive={pendingStatus === "CANCELLED"}
+        isLoading={statusMutation.isPending}
+        onConfirm={() => {
+          if (pendingStatus) statusMutation.mutate(pendingStatus, { onSettled: () => setPendingStatus(null) });
+        }}
       />
 
       <div className="grid gap-4 lg:grid-cols-3">

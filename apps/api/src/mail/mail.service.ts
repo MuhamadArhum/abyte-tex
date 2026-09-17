@@ -24,9 +24,25 @@ export class MailService implements OnModuleInit {
     this.from = this.configService.get('mail.from', { infer: true });
   }
 
+  /**
+   * P1 remediation (SEC-001): the dev "log instead of send" fallback was
+   * previously gated only on whether SMTP_HOST was set, regardless of
+   * NODE_ENV. A production deployment that forgot to configure SMTP would
+   * silently fall through to logging full password-reset/invite URLs — the
+   * bearer token itself — into whatever log pipeline the process has.
+   * Production now fails fast at boot instead, matching this app's existing
+   * fail-fast-on-missing-config philosophy (JWT secrets, DATABASE_URL).
+   */
   onModuleInit() {
     const host = this.configService.get('mail.host', { infer: true });
+    const isProduction = this.configService.get('isProduction', { infer: true });
+
     if (!host) {
+      if (isProduction) {
+        throw new Error(
+          'SMTP_HOST must be configured in production — refusing to start with the dev mail fallback active, which would log password-reset/invite tokens in plaintext.',
+        );
+      }
       this.logger.warn('SMTP_HOST not configured — MailService will log emails instead of sending them.');
       return;
     }
@@ -43,9 +59,10 @@ export class MailService implements OnModuleInit {
 
   async send(input: SendMailInput): Promise<void> {
     if (!this.transporter) {
-      this.logger.warn(
-        `[DEV MODE — email not sent] To: ${input.to} | Subject: ${input.subject}\n${input.text ?? input.html}`,
-      );
+      // P1 remediation (SEC-001): never log the actual link/token, even in the dev
+      // fallback — only that an email would have been sent, and to whom. The previous
+      // version logged the full rendered body (including reset/invite URLs) unconditionally.
+      this.logger.warn(`[DEV MODE — email not sent] To: ${input.to} | Subject: ${input.subject} (body omitted)`);
       return;
     }
 

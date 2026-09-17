@@ -22,7 +22,7 @@ export class ProcurementController {
 
   @RequirePermission(Resource.PURCHASE_ORDER, Action.VIEW)
   @Get('purchase-requests')
-  listRequests(@Query() query: PaginationQueryDto) {
+  listRequests(@Query() query: PaginationQueryDto & { factoryId?: string }) {
     return this.procurementService.listRequests(query);
   }
 
@@ -34,20 +34,24 @@ export class ProcurementController {
 
   @RequirePermission(Resource.PURCHASE_ORDER, Action.APPROVE)
   @Patch('purchase-requests/:id/status')
-  updateRequestStatus(@Param('id') id: string, @Body() dto: UpdatePurchaseRequestStatusDto) {
-    return this.procurementService.updateRequestStatus(id, dto);
+  updateRequestStatus(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: UpdatePurchaseRequestStatusDto,
+  ) {
+    return this.procurementService.updateRequestStatus(id, dto, user.userId);
   }
 
   // Purchase Orders
   @RequirePermission(Resource.PURCHASE_ORDER, Action.CREATE)
   @Post('purchase-orders')
-  createOrder(@Body() dto: CreatePurchaseOrderDto) {
-    return this.procurementService.createOrder(dto);
+  createOrder(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreatePurchaseOrderDto) {
+    return this.procurementService.createOrder(dto, user.userId);
   }
 
   @RequirePermission(Resource.PURCHASE_ORDER, Action.VIEW)
   @Get('purchase-orders')
-  listOrders(@Query() query: PaginationQueryDto & { status?: string }) {
+  listOrders(@Query() query: PaginationQueryDto & { status?: string; factoryId?: string }) {
     return this.procurementService.listOrders(query);
   }
 
@@ -59,20 +63,30 @@ export class ProcurementController {
 
   @RequirePermission(Resource.PURCHASE_ORDER, Action.APPROVE)
   @Patch('purchase-orders/:id/status')
-  updateOrderStatus(@Param('id') id: string, @Body() dto: UpdatePurchaseOrderStatusDto) {
-    return this.procurementService.updateOrderStatus(id, dto);
+  updateOrderStatus(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: UpdatePurchaseOrderStatusDto,
+  ) {
+    return this.procurementService.updateOrderStatus(id, dto, user.userId);
   }
 
   // Goods Receipts
   @RequirePermission(Resource.PURCHASE_ORDER, Action.CREATE)
   @Post('goods-receipts')
-  createGoodsReceipt(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateGoodsReceiptDto) {
-    return this.procurementService.createGoodsReceipt(dto, user.userId);
+  createGoodsReceipt(@Body() dto: CreateGoodsReceiptDto) {
+    return this.procurementService.createGoodsReceipt(dto);
+  }
+
+  @RequirePermission(Resource.PURCHASE_ORDER, Action.APPROVE)
+  @Post('goods-receipts/:id/accept')
+  acceptGoodsReceipt(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.procurementService.acceptGoodsReceipt(id, user.userId);
   }
 
   @RequirePermission(Resource.PURCHASE_ORDER, Action.VIEW)
   @Get('goods-receipts')
-  listGoodsReceipts(@Query() query: PaginationQueryDto) {
+  listGoodsReceipts(@Query() query: PaginationQueryDto & { factoryId?: string }) {
     return this.procurementService.listGoodsReceipts(query);
   }
 

@@ -109,6 +109,7 @@ model Tenant {
   files         FileAsset[]
   auditLogs     AuditLog[]
   syncEvents    SyncEvent[]
+  idempotencyKeys IdempotencyKey[]
 
   @@map("tenants")
 }
@@ -323,7 +324,6 @@ model Factory {
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
 
   departments Department[]
   warehouses  Warehouse[]         @relation("WarehouseFactory")
@@ -395,7 +395,6 @@ model Warehouse {
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
 
   locations            Location[]
   stock                Stock[]
@@ -480,7 +479,6 @@ model Customer {
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
 
   salesQuotations SalesQuotation[]
   salesOrders     SalesOrder[]
@@ -505,7 +503,6 @@ model Supplier {
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
 
   purchaseOrders PurchaseOrder[]
 
@@ -562,7 +559,6 @@ model Product {
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
 
   salesQuotationItems SalesQuotationItem[]
   salesOrderItems     SalesOrderItem[]
@@ -602,7 +598,6 @@ model Material {
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
 
   purchaseRequestItems PurchaseRequestItem[]
   purchaseOrderItems   PurchaseOrderItem[]
@@ -702,7 +697,6 @@ model SalesOrder {
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
 
   items              SalesOrderItem[]
   productionOrders   ProductionOrder[]
@@ -800,6 +794,10 @@ model PurchaseOrder {
   purchaseRequestId String?
   purchaseRequest   PurchaseRequest?    @relation(fields: [purchaseRequestId], references: [id])
   status            PurchaseOrderStatus @default(DRAFT)
+  /// P1 remediation (WF-005): unenforced string actor reference, matching the
+  /// existing pattern for PurchaseRequest.requestedBy (D-005) — enables
+  /// segregation-of-duties on approval (creator cannot approve their own PO).
+  createdBy         String?
 
   orderDate    DateTime  @default(now())
   expectedDate DateTime?
@@ -952,7 +950,12 @@ model ProductionOrder {
 
   orderNumber    String
   salesOrderId   String?
-  salesOrder     SalesOrder?   @relation(fields: [salesOrderId], references: [id])
+  /// P1 remediation (DB-006): Restrict, not the previous implicit SetNull — a
+  /// SalesOrder with linked production history can no longer be hard-deleted,
+  /// preserving the SRS §9.2 Customer Order -> Production Order traceability
+  /// chain (no delete endpoint currently exists for SalesOrder anyway, so
+  /// this closes a latent gap, not a reachable one).
+  salesOrder     SalesOrder?   @relation(fields: [salesOrderId], references: [id], onDelete: Restrict)
   productId      String
   product        Product       @relation(fields: [productId], references: [id])
   quantity       Decimal       @db.Decimal(14, 3)
@@ -1024,8 +1027,13 @@ model ProductionBatch {
   endTime   DateTime?
   status    BatchStatus @default(IN_PROGRESS)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  /// P0 remediation (DB-001): soft-delete marker. No service currently hard-deletes a
+  /// ProductionBatch (no delete endpoint exists), but the FK Restrict below is the real
+  /// guard — this field exists so a future deactivate/archive flow has somewhere to land
+  /// instead of reaching for a hard delete.
+  deletedAt DateTime?
 
   materialConsumptions MaterialConsumption[]
   qualityInspections   QualityInspection[]
@@ -1042,7 +1050,9 @@ model MaterialConsumption {
   productionOrderId String
   productionOrder   ProductionOrder  @relation(fields: [productionOrderId], references: [id])
   productionBatchId String?
-  productionBatch   ProductionBatch? @relation(fields: [productionBatchId], references: [id])
+  /// P0 remediation (DB-001): Restrict, not the previous implicit SetNull — a batch with
+  /// consumption history linked to it can no longer be hard-deleted out from under it.
+  productionBatch   ProductionBatch? @relation(fields: [productionBatchId], references: [id], onDelete: Restrict)
   materialId        String
   material          Material         @relation(fields: [materialId], references: [id])
   warehouseId       String
@@ -1087,7 +1097,6 @@ model Machine {
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
 
   productionBatches        ProductionBatch[]
   assignedProductionOrders ProductionOrder[]     @relation("ProductionOrderAssignedMachine")
@@ -1217,9 +1226,13 @@ model StockMovement {
   locationId  String?
   location    Location? @relation(fields: [locationId], references: [id])
   productId   String?
-  product     Product?  @relation(fields: [productId], references: [id])
+  /// P0 remediation (DB-003): Restrict, not the previous implicit SetNull — a Product
+  /// with StockMovement ledger history can no longer be hard-deleted, which would have
+  /// silently anonymized the audit trail SRS §8.3 requires.
+  product     Product?  @relation(fields: [productId], references: [id], onDelete: Restrict)
   materialId  String?
-  material    Material? @relation(fields: [materialId], references: [id])
+  /// P0 remediation (DB-003): same reasoning as productId above, for Material.
+  material    Material? @relation(fields: [materialId], references: [id], onDelete: Restrict)
   batchNumber String?
 
   type          StockMovementType
@@ -1340,7 +1353,9 @@ model QualityInspection {
   templateId        String?
   template          InspectionTemplate? @relation(fields: [templateId], references: [id])
   productionBatchId String?
-  productionBatch   ProductionBatch?    @relation(fields: [productionBatchId], references: [id])
+  /// P0 remediation (DB-001): Restrict — an inspection record must not be able to outlive
+  /// (or silently detach from) the batch it inspected.
+  productionBatch   ProductionBatch?    @relation(fields: [productionBatchId], references: [id], onDelete: Restrict)
   goodsReceiptId    String?
   salesOrderId      String?
   salesOrder        SalesOrder?         @relation(fields: [salesOrderId], references: [id])
@@ -1412,6 +1427,13 @@ model MaintenanceJob {
   type       MaintenanceType
   downtimeId String?
   downtime   Downtime?         @relation(fields: [downtimeId], references: [id])
+  /// P1 remediation (WF-018): links a PREVENTIVE job back to the schedule it
+  /// satisfies, so completing it can advance that schedule's nextDueAt/
+  /// lastPerformedAt — previously there was no way to know which schedule a
+  /// completed job corresponded to, so nextDueAt never moved past its
+  /// creation-time value.
+  scheduleId String?
+  schedule   MaintenanceSchedule? @relation(fields: [scheduleId], references: [id])
   status     MaintenanceStatus @default(OPEN)
 
   scheduledDate  DateTime?
@@ -1444,6 +1466,8 @@ model MaintenanceSchedule {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  jobs MaintenanceJob[]
 
   @@map("maintenance_schedules")
 }
@@ -1484,7 +1508,6 @@ model Employee {
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
 
   attendances           Attendance[]
   incentives            Incentive[]
@@ -1615,7 +1638,9 @@ model CostSheet {
   productionOrderId String?
   productionOrder   ProductionOrder? @relation(fields: [productionOrderId], references: [id])
   productionBatchId String?
-  productionBatch   ProductionBatch? @relation(fields: [productionBatchId], references: [id])
+  /// P0 remediation (DB-001): Restrict — a costed batch must not be hard-deletable while
+  /// its cost sheet still references it.
+  productionBatch   ProductionBatch? @relation(fields: [productionBatchId], references: [id], onDelete: Restrict)
 
   materialCost Decimal @default(0) @db.Decimal(14, 2)
   laborCost    Decimal @default(0) @db.Decimal(14, 2)
@@ -1785,4 +1810,24 @@ model SyncEvent {
   @@unique([tenantId, userId, localId])
   @@index([tenantId, syncStatus])
   @@map("sync_events")
+}
+
+/// P1 remediation (API-005): duplicate-submission protection for document-creating
+/// endpoints (Sales/Purchase Orders, Goods Receipts, Dispatches) — a client-supplied
+/// key, scoped per tenant + endpoint, that a retried request reuses to get back the
+/// original result instead of creating a second document. See
+/// `apps/api/src/common/idempotency.service.ts`.
+model IdempotencyKey {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  scope    String // e.g. "sales_order:create"
+  key      String // client-supplied idempotency key
+  resultId String // id of the resource that was actually created
+
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, scope, key])
+  @@map("idempotency_keys")
 }

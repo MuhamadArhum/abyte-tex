@@ -44,6 +44,9 @@ export class CreateSalesOrderDto {
   @IsOptional() @IsNumber() @Min(0) tax?: number;
   @IsOptional() @IsString() notes?: string;
 
+  /** P1 remediation (API-005): optional client-generated key — a retried request with the same key returns the original order instead of creating a second one. */
+  @IsOptional() @IsString() idempotencyKey?: string;
+
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })

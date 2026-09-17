@@ -47,6 +47,7 @@ export const TENANT_SCOPED_MODELS: ReadonlySet<Prisma.ModelName> = new Set<Prism
   'FileAsset',
   'AuditLog',
   'SyncEvent',
+  'IdempotencyKey',
 ]);
 
 /** Operation kinds where tenantId must be merged into `where`. */

@@ -19,7 +19,7 @@ export class DispatchController {
 
   @RequirePermission(Resource.DISPATCH, Action.VIEW)
   @Get()
-  list(@Query() query: PaginationQueryDto & { salesOrderId?: string }) {
+  list(@Query() query: PaginationQueryDto & { salesOrderId?: string; factoryId?: string }) {
     return this.dispatchService.list(query);
   }
 

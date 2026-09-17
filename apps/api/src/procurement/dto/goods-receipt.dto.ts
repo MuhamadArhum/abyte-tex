@@ -12,6 +12,8 @@ export class GoodsReceiptItemDto {
 export class CreateGoodsReceiptDto {
   @IsString() purchaseOrderId!: string;
   @IsString() warehouseId!: string;
+  /** P1 remediation (API-005): optional client-generated key — a retried request with the same key returns the original receipt instead of creating a second one. */
+  @IsOptional() @IsString() idempotencyKey?: string;
 
   @IsArray()
   @ArrayMinSize(1)

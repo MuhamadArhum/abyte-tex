@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { TenantContextStore } from '../common/tenant-context';
+import { assertFactoryAccess, factoryScopeFilter } from '../common/factory-access.util';
 import { PaginationQueryDto, buildPaginationMeta } from '../common/dto/pagination.dto';
 import { CreateEmployeeDto, UpdateEmployeeDto } from './dto/employee.dto';
 
@@ -15,6 +16,7 @@ export class EmployeesService {
   async create(factoryId: string, dto: CreateEmployeeDto) {
     const ctx = TenantContextStore.getOrThrow();
     if (!ctx.tenantId) throw new ConflictException('Employees can only be created within a tenant context');
+    assertFactoryAccess(ctx, factoryId);
 
     const factory = await this.prisma.db.factory.findUnique({ where: { id: factoryId } });
     if (!factory) throw new NotFoundException('Factory not found');
@@ -28,8 +30,10 @@ export class EmployeesService {
   }
 
   async list(factoryId: string | undefined, query: PaginationQueryDto) {
+    const ctx = TenantContextStore.getOrThrow();
+    if (factoryId) assertFactoryAccess(ctx, factoryId);
     const where = {
-      ...(factoryId ? { factoryId } : {}),
+      ...factoryScopeFilter(ctx, factoryId),
       ...(query.search
         ? {
             OR: [
@@ -63,6 +67,7 @@ export class EmployeesService {
       include: { department: true, shift: true, factory: { select: { id: true, name: true, code: true } } },
     });
     if (!employee) throw new NotFoundException('Employee not found');
+    assertFactoryAccess(TenantContextStore.getOrThrow(), employee.factoryId);
     return employee;
   }
 

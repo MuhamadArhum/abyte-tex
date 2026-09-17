@@ -24,8 +24,15 @@ export const PRODUCTION_ORDER_STATUSES = [
   'COMPLETED',
   'CANCELLED',
 ] as const;
+export type ProductionOrderStatus = (typeof PRODUCTION_ORDER_STATUSES)[number];
 
+/**
+ * P1 remediation (WF-007): transitions are now validated against
+ * `PRODUCTION_ORDER_TRANSITIONS` in `production.service.ts` — a jump like
+ * PLANNED -> COMPLETED is rejected, and COMPLETED additionally requires real
+ * production evidence (batches with recorded output) — see `completeOrder()`.
+ */
 export class UpdateProductionOrderStatusDto {
   @IsIn(PRODUCTION_ORDER_STATUSES)
-  status!: (typeof PRODUCTION_ORDER_STATUSES)[number];
+  status!: ProductionOrderStatus;
 }

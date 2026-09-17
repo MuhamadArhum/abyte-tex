@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { TenantContextStore } from '../common/tenant-context';
+import { assertFactoryAccess } from '../common/factory-access.util';
 import { PaginationQueryDto, buildPaginationMeta } from '../common/dto/pagination.dto';
 import { CloseDowntimeDto, CreateDowntimeDto, DowntimeCategoryDto } from './dto/downtime.dto';
 
@@ -21,6 +22,7 @@ export class DowntimeService {
 
     const machine = await this.prisma.db.machine.findUnique({ where: { id: dto.machineId } });
     if (!machine) throw new NotFoundException('Machine not found');
+    assertFactoryAccess(ctx, machine.factoryId);
 
     const isBreakdown = BREAKDOWN_CATEGORIES.has(dto.category);
 
@@ -63,15 +65,32 @@ export class DowntimeService {
     return downtime;
   }
 
+  /**
+   * P1 remediation (WF-017): closing a downtime record no longer
+   * unconditionally marks the machine RUNNING — it now checks whether the
+   * corrective `MaintenanceJob` this downtime auto-created (or any other
+   * open job against the same machine) is still open, and leaves the
+   * machine's status alone if so. Previously a supervisor closing a routine
+   * downtime record could mark a machine available for production while its
+   * actual mechanical/electrical fault was still an open maintenance job.
+   */
   async close(id: string, dto: CloseDowntimeDto) {
     const existing = await this.getById(id);
     const endTime = new Date(dto.endTime);
     const durationMinutes = Math.max(0, Math.round((endTime.getTime() - existing.startTime.getTime()) / 60000));
 
-    const [updated] = await this.prisma.db.$transaction([
-      this.prisma.db.downtime.update({ where: { id }, data: { endTime, durationMinutes } }),
-      this.prisma.db.machine.update({ where: { id: existing.machineId }, data: { status: 'RUNNING' } }),
-    ]);
+    const [updated] = await this.prisma.db.$transaction(async (tx) => {
+      const updatedDowntime = await tx.downtime.update({ where: { id }, data: { endTime, durationMinutes } });
+
+      const openJobs = await tx.maintenanceJob.count({
+        where: { machineId: existing.machineId, status: { in: ['OPEN', 'IN_PROGRESS'] } },
+      });
+      if (openJobs === 0) {
+        await tx.machine.update({ where: { id: existing.machineId }, data: { status: 'RUNNING' } });
+      }
+
+      return [updatedDowntime];
+    });
 
     await this.auditService.log({
       action: 'UPDATE',
@@ -83,7 +102,11 @@ export class DowntimeService {
   }
 
   async list(query: PaginationQueryDto & { machineId?: string }) {
-    const where = query.machineId ? { machineId: query.machineId } : {};
+    const ctx = TenantContextStore.getOrThrow();
+    const where = {
+      ...(query.machineId ? { machineId: query.machineId } : {}),
+      ...(ctx.factoryIds.length > 0 ? { machine: { factoryId: { in: ctx.factoryIds } } } : {}),
+    };
     const [items, total] = await Promise.all([
       this.prisma.db.downtime.findMany({
         where,
@@ -103,6 +126,7 @@ export class DowntimeService {
       include: { machine: true, maintenanceJobs: true },
     });
     if (!downtime) throw new NotFoundException('Downtime record not found');
+    assertFactoryAccess(TenantContextStore.getOrThrow(), downtime.machine.factoryId);
     return downtime;
   }
 }

@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { TenantContextStore } from '../common/tenant-context';
+import { assertFactoryAccess, factoryScopeFilter } from '../common/factory-access.util';
 import { PaginationQueryDto, buildPaginationMeta } from '../common/dto/pagination.dto';
 import { AddPayrollEntryDto, CreatePayrollPeriodDto, UpdatePayrollPeriodStatusDto } from './dto/payroll.dto';
 
@@ -15,6 +16,7 @@ export class PayrollService {
   async createPeriod(dto: CreatePayrollPeriodDto) {
     const ctx = TenantContextStore.getOrThrow();
     if (!ctx.tenantId) throw new ConflictException('Payroll periods can only be created within a tenant context');
+    assertFactoryAccess(ctx, dto.factoryId);
 
     const factory = await this.prisma.db.factory.findUnique({ where: { id: dto.factoryId } });
     if (!factory) throw new NotFoundException('Factory not found');
@@ -30,7 +32,9 @@ export class PayrollService {
   }
 
   async list(query: PaginationQueryDto & { factoryId?: string }) {
-    const where = query.factoryId ? { factoryId: query.factoryId } : {};
+    const ctx = TenantContextStore.getOrThrow();
+    if (query.factoryId) assertFactoryAccess(ctx, query.factoryId);
+    const where = factoryScopeFilter(ctx, query.factoryId);
     const [items, total] = await Promise.all([
       this.prisma.db.payrollPeriod.findMany({
         where,
@@ -54,6 +58,7 @@ export class PayrollService {
       },
     });
     if (!period) throw new NotFoundException('Payroll period not found');
+    assertFactoryAccess(TenantContextStore.getOrThrow(), period.factoryId);
     return period;
   }
 

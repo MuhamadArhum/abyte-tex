@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { TenantContextStore } from '../common/tenant-context';
+import { assertFactoryAccess, factoryScopeFilter } from '../common/factory-access.util';
 import { PaginationQueryDto, buildPaginationMeta } from '../common/dto/pagination.dto';
 import { CreateMachineDto, UpdateMachineDto } from './dto/machine.dto';
 
@@ -15,6 +16,7 @@ export class MachinesService {
   async create(factoryId: string, dto: CreateMachineDto) {
     const ctx = TenantContextStore.getOrThrow();
     if (!ctx.tenantId) throw new ConflictException('Machines can only be created within a tenant context');
+    assertFactoryAccess(ctx, factoryId);
 
     const factory = await this.prisma.db.factory.findUnique({ where: { id: factoryId } });
     if (!factory) throw new NotFoundException('Factory not found');
@@ -28,8 +30,10 @@ export class MachinesService {
   }
 
   async list(factoryId: string | undefined, query: PaginationQueryDto) {
+    const ctx = TenantContextStore.getOrThrow();
+    if (factoryId) assertFactoryAccess(ctx, factoryId);
     const where = {
-      ...(factoryId ? { factoryId } : {}),
+      ...factoryScopeFilter(ctx, factoryId),
       ...(query.search
         ? {
             OR: [
@@ -62,6 +66,7 @@ export class MachinesService {
       },
     });
     if (!machine) throw new NotFoundException('Machine not found');
+    assertFactoryAccess(TenantContextStore.getOrThrow(), machine.factoryId);
     return machine;
   }
 

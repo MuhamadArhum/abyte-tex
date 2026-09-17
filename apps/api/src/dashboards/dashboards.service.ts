@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { TenantContextStore } from '../common/tenant-context';
 
 const START_OF_TODAY = () => {
   const d = new Date();
@@ -138,12 +139,30 @@ export class DashboardsService {
     };
   }
 
+  /**
+   * P0 remediation (TEN-001): `topDefects` previously called `prisma.raw.defect.groupBy(...)`
+   * with no `where` clause at all. `Defect` has no `tenantId` column of its own — it is a
+   * child of `QualityInspection` and inherits tenant scope only through that relation — so
+   * bypassing `.db` here meant the query had no tenant boundary whatsoever and aggregated
+   * defect-type counts across every tenant on the platform. Fixed by explicitly filtering
+   * through the parent `qualityInspection.tenantId` relation, using the tenant id from the
+   * current request context (never client input) rather than switching to `.db` (which
+   * would not auto-scope `Defect` anyway, since it is intentionally not in
+   * `TENANT_SCOPED_MODELS` — see D-014's documented child-model pattern).
+   */
   async getQualityDashboard() {
+    const ctx = TenantContextStore.getOrThrow();
+    // Fail closed exactly like the tenant-scoping Prisma extension does for `.db` calls —
+    // never let a missing tenantId silently fall through to an unfiltered `.raw` query.
+    if (!ctx.tenantId) throw new Error('getQualityDashboard requires a tenant context');
+    const tenantId = ctx.tenantId;
+
     const [outcomeCounts, topDefects] = await Promise.all([
       this.prisma.db.qualityInspection.groupBy({ by: ['outcome'], _count: true }),
       this.prisma.raw.defect.groupBy({
         by: ['defectType'],
         _count: true,
+        where: { qualityInspection: { tenantId } },
         orderBy: { _count: { defectType: 'desc' } },
         take: 5,
       }),

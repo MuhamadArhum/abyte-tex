@@ -8,6 +8,7 @@ import { buildConfiguration } from './config/configuration';
 
 import { PrismaModule } from './prisma/prisma.module';
 import { AuditModule } from './audit/audit.module';
+import { IdempotencyModule } from './common/idempotency.module';
 import { MailModule } from './mail/mail.module';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -55,6 +56,7 @@ import { HealthModule } from './health/health.module';
 
     PrismaModule,
     AuditModule,
+    IdempotencyModule,
     MailModule,
 
     AuthModule,

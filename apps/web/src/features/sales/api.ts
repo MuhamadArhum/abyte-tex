@@ -8,6 +8,29 @@ export const SALES_ORDER_STATUSES: SalesOrderStatus[] = [
   "DRAFT", "CONFIRMED", "PRODUCTION_PLANNED", "IN_PRODUCTION", "QUALITY", "READY", "DISPATCHED", "COMPLETED", "CANCELLED",
 ];
 
+/**
+ * P1 remediation (Step 15 / FE-013): mirrors the backend's
+ * `SALES_ORDER_MANUAL_TRANSITIONS` (apps/api/src/sales/sales.service.ts)
+ * exactly. The frontend dropdown now only *offers* a legal next state — the
+ * backend remains the authoritative enforcement point regardless (this is a
+ * UX improvement, not a security boundary: a direct API call is still
+ * validated server-side the same way it always was). READY and DISPATCHED
+ * are intentionally absent everywhere — they are system-set only, by
+ * creating a real Dispatch.
+ */
+export const SALES_ORDER_ALLOWED_NEXT_STATUSES: Partial<Record<SalesOrderStatus, SalesOrderStatus[]>> = {
+  DRAFT: ["CONFIRMED", "CANCELLED"],
+  CONFIRMED: ["PRODUCTION_PLANNED", "CANCELLED"],
+  PRODUCTION_PLANNED: ["IN_PRODUCTION", "CANCELLED"],
+  IN_PRODUCTION: ["QUALITY", "CANCELLED"],
+  QUALITY: ["READY", "CANCELLED"],
+  READY: ["CANCELLED"],
+  DISPATCHED: ["COMPLETED"],
+};
+
+/** Transitions that should be confirmed before firing — terminal or otherwise hard to walk back. */
+export const SALES_ORDER_DESTRUCTIVE_STATUSES = new Set<SalesOrderStatus>(["CANCELLED", "COMPLETED"]);
+
 export interface SalesOrderItem {
   id: string;
   productId: string;

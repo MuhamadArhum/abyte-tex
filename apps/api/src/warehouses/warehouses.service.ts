@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { TenantContextStore } from '../common/tenant-context';
+import { assertFactoryAccess } from '../common/factory-access.util';
 import { CreateLocationDto, CreateWarehouseDto, UpdateWarehouseDto } from './dto/warehouse.dto';
 
 @Injectable()
@@ -12,6 +13,7 @@ export class WarehousesService {
   ) {}
 
   private async assertFactoryExists(factoryId: string) {
+    assertFactoryAccess(TenantContextStore.getOrThrow(), factoryId);
     const factory = await this.prisma.db.factory.findUnique({ where: { id: factoryId } });
     if (!factory) throw new NotFoundException('Factory not found');
   }
@@ -35,6 +37,7 @@ export class WarehousesService {
   }
 
   async getById(factoryId: string, id: string) {
+    assertFactoryAccess(TenantContextStore.getOrThrow(), factoryId);
     const warehouse = await this.prisma.db.warehouse.findFirst({
       where: { id, factoryId },
       include: { locations: true },
